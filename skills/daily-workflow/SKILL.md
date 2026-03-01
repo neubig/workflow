@@ -1,5 +1,5 @@
 ---
-name: neubig-daily-workflow
+name: daily-workflow
 description: Graham's daily workflow for managing Linear tickets and GitHub PRs. Prioritizes work by Linear priority, manages PR review cycles, and tracks resources needed for testing.
 triggers:
 - daily workflow
