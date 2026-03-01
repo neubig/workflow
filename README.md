@@ -166,6 +166,29 @@ If the PR has review comments:
    }'
    ```
 
+4. **IMPORTANT: Iterate Until All Reviews Resolved**
+   
+   After pushing fixes and resolving threads, **always re-check for new reviews**. Bots may add new comments on your new code:
+   
+   ```bash
+   # Check for unresolved reviews
+   gh api graphql -f query='
+   {
+     repository(owner: "OWNER", name: "REPO") {
+       pullRequest(number: PR_NUMBER) {
+         reviewThreads(first: 30) {
+           nodes { isResolved }
+         }
+       }
+     }
+   }' | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length'
+   ```
+   
+   **Repeat the cycle until the count is 0:**
+   - If new unresolved reviews appear → Address them
+   - Push fixes → Re-check for new reviews
+   - Continue until no unresolved reviews remain
+
 #### 2. Demonstrate Functionality (CRITICAL)
 
 **This is NOT just running unit tests** - it requires live demonstration of behavior.
@@ -196,10 +219,30 @@ Keep these as draft until testing is possible:
 - README changes
 - Comment/docstring additions
 
-#### 3. Check for Bot Reviews
+#### 3. Check for Bot Reviews (ITERATIVE PROCESS)
 
-After marking a PR ready, automated bots (e.g., `all-hands-bot`) may add review comments. Always re-check for new reviews:
+After marking a PR ready, automated bots (e.g., `all-hands-bot`) may add review comments. **This is an iterative process** - bots may review your fixes and add new comments.
 
+**The Complete Bot Review Loop:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  1. Check for unresolved reviews                            │
+│     ↓                                                       │
+│  2. If unresolved > 0:                                      │
+│     a. Move PR to draft                                     │
+│     b. Address each review comment                          │
+│     c. Push fixes                                           │
+│     d. Resolve review threads                               │
+│     e. Mark PR ready                                        │
+│     f. GOTO step 1 (bot may review new code!)               │
+│     ↓                                                       │
+│  3. If unresolved == 0:                                     │
+│     ✓ PR is ready for human review                          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Check for unresolved reviews:**
 ```bash
 gh api graphql -f query='
 {
@@ -218,7 +261,7 @@ gh api graphql -f query='
 }'
 ```
 
-If bot reviews appear with critical issues, move the PR back to draft:
+**Move PR back to draft if bot reviews found:**
 ```bash
 gh api graphql -f query='
 mutation {
@@ -226,6 +269,33 @@ mutation {
     pullRequest { isDraft }
   }
 }'
+```
+
+**Mark PR ready after addressing all reviews:**
+```bash
+gh api graphql -f query='
+mutation {
+  markPullRequestReadyForReview(input: {pullRequestId: "PR_ID"}) {
+    pullRequest { isDraft }
+  }
+}'
+```
+
+**Best Practice: Batch Check All Ready PRs**
+
+Run this periodically to check all ready PRs for new bot reviews:
+```bash
+for pr_info in "Owner/Repo/PR_NUM" "Owner2/Repo2/PR_NUM2"; do
+  owner=$(echo $pr_info | cut -d'/' -f1)
+  repo=$(echo $pr_info | cut -d'/' -f2)
+  num=$(echo $pr_info | cut -d'/' -f3)
+  unresolved=$(gh api graphql -f query="{ repository(owner: \"$owner\", name: \"$repo\") { pullRequest(number: $num) { reviewThreads(first: 30) { nodes { isResolved } } } } }" | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length')
+  if [ "$unresolved" != "0" ]; then
+    echo "⚠️  $owner/$repo#$num: $unresolved unresolved"
+  else
+    echo "✅ $owner/$repo#$num: OK"
+  fi
+done
 ```
 
 ---
@@ -257,9 +327,12 @@ wait
 - [ ] Identify high-priority tickets requiring attention
 - [ ] List tickets requiring manual action (Slack pings, emails)
 - [ ] Check ready PRs for review status
+- [ ] **Check ready PRs for NEW bot reviews (iterative!)**
+- [ ] Move PRs with unresolved reviews back to draft
 - [ ] Identify PRs needing reviewer pings (>2 business days)
 - [ ] Check draft PRs for unresolved review comments
 - [ ] Work on draft PRs to address feedback or demonstrate functionality
+- [ ] After marking PRs ready, **re-check for bot reviews** (repeat until 0)
 
 ### Key Commands
 
