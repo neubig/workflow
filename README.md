@@ -166,17 +166,67 @@ If the PR has review comments:
    }'
    ```
 
-#### 2. Demonstrate Functionality
+#### 2. Demonstrate Functionality (CRITICAL)
+
+**This is NOT just running unit tests** - it requires live demonstration of behavior.
 
 **For Bug Fix PRs:**
-1. Reproduce the bug using code before the PR
-2. Apply the PR changes
-3. Demonstrate the bug is fixed
+1. Clone the repo and checkout the base branch (before the fix)
+2. Run the code that triggers the bug - capture the error output
+3. Checkout the PR branch (with the fix)
+4. Run the same code - demonstrate the bug no longer occurs
+5. Include both outputs in PR comments if not already documented
 
 **For New Feature PRs:**
-1. Set up a test environment
-2. Run the feature in a live setting
-3. Document the demonstration
+1. Clone the repo and checkout the PR branch
+2. Install dependencies and set up environment
+3. Run the feature in a live setting with real inputs/outputs
+4. Capture and document the successful execution
+
+**PRs That CANNOT Be Live Tested Without Special Resources:**
+Keep these as draft until testing is possible:
+- Model changes (e.g., adding new LLM model names) - need API keys
+- CI/CD configs (e.g., Jenkinsfile) - need CI server access
+- Platform-specific fixes (e.g., Windows-only code) - need that platform
+- External service integrations - need credentials/access
+
+**Content-Only PRs (no live testing needed):**
+- Documentation updates
+- Blog posts
+- README changes
+- Comment/docstring additions
+
+#### 3. Check for Bot Reviews
+
+After marking a PR ready, automated bots (e.g., `all-hands-bot`) may add review comments. Always re-check for new reviews:
+
+```bash
+gh api graphql -f query='
+{
+  repository(owner: "OWNER", name: "REPO") {
+    pullRequest(number: PR_NUMBER) {
+      reviewThreads(first: 30) {
+        nodes {
+          isResolved
+          comments(first: 1) {
+            nodes { body author { login } }
+          }
+        }
+      }
+    }
+  }
+}'
+```
+
+If bot reviews appear with critical issues, move the PR back to draft:
+```bash
+gh api graphql -f query='
+mutation {
+  convertPullRequestToDraft(input: {pullRequestId: "PR_ID"}) {
+    pullRequest { isDraft }
+  }
+}'
+```
 
 ---
 
@@ -229,3 +279,26 @@ wait
 - **Business days**: Weekdays (Monday-Friday), excluding holidays
 - **Slack links in Linear**: These require manual review and action
 - **Review comment policy**: Not all feedback needs to be implemented - use judgment on value vs. complexity
+
+---
+
+## PR Status Tracking Template
+
+Use this template to track PR status during workflow:
+
+| PR | Repo | Status | Blockers | Action Needed |
+|----|------|--------|----------|---------------|
+| #XX | org/repo | draft/ready | none/review/testing | description |
+
+### Status Meanings:
+- **draft** - Needs work before review
+- **ready** - Ready for reviewer attention
+- **blocked** - Cannot proceed (missing resources/access)
+- **pending-merge** - Approved, waiting for merge
+
+### Common Blockers:
+- `bot-review` - Automated review found issues
+- `human-review` - Waiting for human reviewer
+- `testing` - Cannot live test without resources
+- `ci-failure` - CI checks failing
+- `merge-conflict` - Needs rebase/merge from main
