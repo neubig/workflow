@@ -1,0 +1,56 @@
+{
+    "name": "neubig-workflow",
+    "owner": {
+        "name": "Graham Neubig",
+        "email": "graham@openhands.dev"
+    },
+    "metadata": {
+        "description": "Graham's personal workflow skills for managing Linear tickets, GitHub PRs, and development tasks",
+        "version": "1.0.0",
+        "pluginRoot": "../skills"
+    },
+    "plugins": [
+        {
+            "name": "daily-workflow",
+            "source": "./daily-workflow",
+            "description": "Graham's daily workflow for managing Linear tickets and GitHub PRs with specific prioritization rules and resource tracking",
+            "category": "workflow",
+            "keywords": [
+                "linear",
+                "github",
+                "daily",
+                "workflow",
+                "prioritization",
+                "resources"
+            ]
+        },
+        {
+            "name": "github-pr-workflow",
+            "source": "./github-pr-workflow",
+            "description": "Complete GitHub PR workflow: live testing requirements and iterative review resolution",
+            "category": "workflow",
+            "keywords": [
+                "github",
+                "pr",
+                "review",
+                "testing",
+                "iteration",
+                "bot"
+            ]
+        }
+    ],
+    "dependencies": {
+        "general": [
+            {
+                "name": "linear",
+                "source": "OpenHands/extensions/skills/linear",
+                "description": "General Linear API skill"
+            },
+            {
+                "name": "github",
+                "source": "OpenHands/extensions/skills/github",
+                "description": "General GitHub API skill"
+            }
+        ]
+    }
+}
