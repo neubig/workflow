@@ -116,20 +116,31 @@ These can be marked ready without evidence:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  1. Check for unresolved reviews                            │
+│  1. Check PR readiness requirements:                         │
+│     a. Evidence in PR description? (see Part 1)              │
+│     b. Unresolved review comments == 0?                      │
 │     ↓                                                       │
-│  2. If unresolved > 0:                                      │
+│  2. If EITHER requirement fails:                             │
 │     a. Move PR to draft (if ready)                          │
-│     b. Address each review comment                          │
-│     c. Push fixes                                           │
-│     d. Reply to and resolve review threads                  │
-│     e. Mark PR ready                                        │
-│     f. GOTO step 1 (bot may review new code!)               │
+│     b. Add/update Evidence section if missing                │
+│     c. Address each unresolved review comment                │
+│     d. Push fixes                                           │
+│     e. Reply to and resolve review threads                  │
+│     f. Mark PR ready                                        │
+│     g. GOTO step 1 (bot may review new code!)               │
 │     ↓                                                       │
-│  3. If unresolved == 0:                                     │
+│  3. If BOTH requirements pass:                               │
 │     ✓ PR is ready for human review                          │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+<IMPORTANT>
+A PR must be in DRAFT status unless BOTH conditions are met:
+1. **Evidence exists**: PR description contains an `## Evidence` section with concrete proof the changes work (before/after for bugs, working demo for features), OR it's a content-only PR
+2. **No unresolved reviews**: All review threads are resolved
+
+If either condition fails, the PR MUST remain in or be moved to draft status.
+</IMPORTANT>
 
 <IMPORTANT>
 After pushing fixes and resolving threads, **always re-check for new reviews**. 
@@ -180,7 +191,9 @@ gh api graphql -f query='
 
 ## Move PR to Draft
 
-When unresolved reviews are found:
+Move a PR to draft when:
+- Unresolved review comments exist, OR
+- Evidence section is missing or incomplete (for non-content PRs)
 ```bash
 # First get the PR node ID
 PR_ID=$(gh api repos/OWNER/REPO/pulls/PR_NUMBER --jq '.node_id')
@@ -222,7 +235,9 @@ mutation {
 
 ## Mark PR Ready for Review
 
-After resolving all comments:
+Only mark ready when BOTH conditions are satisfied:
+1. Evidence section exists in PR description (or it's a content-only PR)
+2. All review threads are resolved
 ```bash
 PR_ID=$(gh api repos/OWNER/REPO/pulls/PR_NUMBER --jq '.node_id')
 
