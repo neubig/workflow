@@ -372,66 +372,102 @@ def run_gh(args: list[str]) -> dict[str, Any] | list[Any] | str | int:
 
 
 def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
-    """Fetch assigned Linear tickets."""
+    """Fetch assigned Linear tickets that are not blocked."""
     import urllib.request
 
-    query = """
-    query {
-        viewer {
-            assignedIssues(first: 100, filter: { state: { type: { nin: ["completed", "canceled"] } } }) {
-                nodes {
-                    identifier
-                    title
-                    description
-                    priority
-                    priorityLabel
-                    url
-                    state { name type }
-                    labels { nodes { name } }
-                }
-            }
-        }
-    }
-    """
+    # Fetch in batches to avoid Linear's query complexity limit
+    # inverseRelations adds significant complexity per issue
+    batch_size = 50
+    all_tickets: list[LinearTicket] = []
+    has_more = True
+    cursor = None
 
-    req = urllib.request.Request(
-        "https://api.linear.app/graphql",
-        data=json.dumps({"query": query}).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": api_key,
-        },
-    )
+    while has_more:
+        after_clause = f', after: "{cursor}"' if cursor else ""
+        query = f"""
+        query {{
+            viewer {{
+                assignedIssues(first: {batch_size}{after_clause}, filter: {{ state: {{ type: {{ nin: ["completed", "canceled"] }} }} }}) {{
+                    pageInfo {{
+                        hasNextPage
+                        endCursor
+                    }}
+                    nodes {{
+                        identifier
+                        title
+                        description
+                        priority
+                        priorityLabel
+                        url
+                        state {{ name type }}
+                        labels {{ nodes {{ name }} }}
+                        inverseRelations {{
+                            nodes {{
+                                type
+                                relatedIssue {{
+                                    state {{ type }}
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        """
 
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode())
-    except Exception as e:
-        print(f"Error fetching Linear tickets: {e}", file=sys.stderr)
-        return []
-
-    tickets = []
-    nodes = (
-        data.get("data", {})
-        .get("viewer", {})
-        .get("assignedIssues", {})
-        .get("nodes", [])
-    )
-    for node in nodes:
-        labels = [l["name"] for l in node.get("labels", {}).get("nodes", [])]
-        tickets.append(
-            LinearTicket(
-                identifier=node["identifier"],
-                title=node["title"],
-                description=node.get("description", "") or "",
-                priority=node.get("priority", 0),
-                priority_label=node.get("priorityLabel", "No priority"),
-                state=node["state"]["name"],
-                state_type=node["state"]["type"],
-                url=node["url"],
-                labels=labels,
-            )
+        req = urllib.request.Request(
+            "https://api.linear.app/graphql",
+            data=json.dumps({"query": query}).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": api_key,
+            },
         )
+
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode())
+        except Exception as e:
+            print(f"Error fetching Linear tickets: {e}", file=sys.stderr)
+            break
+
+        assigned_issues = (
+            data.get("data", {}).get("viewer", {}).get("assignedIssues", {})
+        )
+        nodes = assigned_issues.get("nodes", [])
+        page_info = assigned_issues.get("pageInfo", {})
+
+        for node in nodes:
+            # Skip issues that are blocked by active (non-completed/canceled) issues
+            inverse_relations = node.get("inverseRelations", {}).get("nodes", [])
+            is_blocked = any(
+                rel.get("type") == "blocks"
+                and rel.get("relatedIssue", {}).get("state", {}).get("type")
+                not in ("completed", "canceled")
+                for rel in inverse_relations
+            )
+            if is_blocked:
+                continue
+
+            labels = [l["name"] for l in node.get("labels", {}).get("nodes", [])]
+            all_tickets.append(
+                LinearTicket(
+                    identifier=node["identifier"],
+                    title=node["title"],
+                    description=node.get("description", "") or "",
+                    priority=node.get("priority", 0),
+                    priority_label=node.get("priorityLabel", "No priority"),
+                    state=node["state"]["name"],
+                    state_type=node["state"]["type"],
+                    url=node["url"],
+                    labels=labels,
+                )
+            )
+
+        has_more = page_info.get("hasNextPage", False)
+        cursor = page_info.get("endCursor")
+
+    tickets = all_tickets
 
     # Linear priority: 1=Urgent, 2=High, 3=Medium, 4=Low, 0=No priority
     # Sort so Urgent (1) comes first, No priority (0) comes last
