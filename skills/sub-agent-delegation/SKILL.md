@@ -364,6 +364,39 @@ def check_delegated_tasks(conversation_ids: list[str] = None) -> dict:
 4. **Check for availability**: Verify `DelegateTool` is in tools or `OPENHANDS_CLOUD_API_KEY` is set before attempting delegation
 5. **Handle failures gracefully**: Sub-agents may fail; have a fallback plan
 
+## Rate Limits for OpenHands Cloud API
+
+<IMPORTANT>
+**Do not delegate more than 5 tasks at a time** via the OpenHands Cloud API to avoid hitting rate limits.
+
+Before delegating new tasks:
+1. Check how many conversations are currently running
+2. Wait for some to complete if there are already 5+ running
+3. Then delegate new tasks in batches of 5 or fewer
+
+**Check running conversations before delegating:**
+```python
+def count_running_conversations() -> int:
+    """Count currently running conversations."""
+    session = get_session()
+    response = session.get(
+        f"{BASE_URL}/api/v1/app-conversations/search",
+        params={"limit": 50}
+    )
+    conversations = response.json().get("items", [])
+    running = [c for c in conversations if c.get("execution_status") == "running"]
+    return len(running)
+
+# Before delegating
+running_count = count_running_conversations()
+if running_count >= 5:
+    print(f"Warning: {running_count} tasks already running. Wait for some to complete.")
+else:
+    available_slots = 5 - running_count
+    print(f"Can delegate up to {available_slots} new tasks")
+```
+</IMPORTANT>
+
 ## Delegating PR Fix Tasks
 
 <IMPORTANT>
