@@ -18,7 +18,7 @@ This skill implements Graham's specific daily workflow for managing development 
 
 ## Workflow Overview
 
-The daily workflow consists of three phases executed in order:
+The daily workflow consists of four phases executed in order:
 
 ```
 1. LINEAR TICKETS     →  Work on highest priority first
@@ -26,6 +26,8 @@ The daily workflow consists of three phases executed in order:
 2. READY PRs          →  Check for reviews, ping reviewers if stale
        ↓  
 3. DRAFT PRs          →  Address feedback, demonstrate functionality
+       ↓
+4. ACTION ITEMS       →  Categorized list of items needing user help
 ```
 
 ## Phase 1: Linear Tickets
@@ -141,7 +143,7 @@ When PRs cannot be live tested, always provide a categorized list:
 After providing the list, ask:
 > Would you like me to work on any of these if you can provide the required resources?
 
-## Final Output: Categorized Action Items
+## Phase 4: Categorized Action Items
 
 At the end of the workflow, ALWAYS provide a categorized summary of items requiring user help:
 
