@@ -206,3 +206,15 @@ Use the OpenHands CI system. See [eval-with-ci](../eval-with-ci/SKILL.md) skill.
 ### How do I know which PRs need reviewer pings?
 
 The agent checks all ready PRs and reports those >2 days old with direct links. The user then pings reviewers on Slack manually.
+
+### How do I start Docker for testing?
+
+If Docker is needed but the daemon isn't running, start it with:
+
+```bash
+sudo dockerd > /tmp/docker.log 2>&1 &
+sleep 5
+sudo docker ps  # Verify it's running
+```
+
+See the [docker skill](https://github.com/OpenHands/extensions/tree/main/skills/docker) for more details.
