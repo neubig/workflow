@@ -364,6 +364,33 @@ def check_delegated_tasks(conversation_ids: list[str] = None) -> dict:
 4. **Check for availability**: Verify `DelegateTool` is in tools or `OPENHANDS_CLOUD_API_KEY` is set before attempting delegation
 5. **Handle failures gracefully**: Sub-agents may fail; have a fallback plan
 
+## Delegating PR Fix Tasks
+
+<IMPORTANT>
+When delegating PR fix tasks to sub-agents, always include these requirements in the task description:
+
+1. **CI must pass before marking ready**: The sub-agent must wait for CI to complete and verify all checks pass before marking the PR ready for review
+2. **All review comments must be resolved**: Every unresolved review thread must be addressed and resolved
+3. **No merge conflicts**: If the PR has conflicts, they must be resolved first
+4. **Keep in draft if any condition fails**: If CI fails, reviews remain unresolved, or conflicts exist, the PR must stay in draft
+
+**Example task description for PR fixes:**
+```
+Fix unresolved review comments in PR #123.
+
+After fixing:
+1. Push your changes
+2. Wait for CI to complete
+3. Verify ALL CI checks pass (do not mark ready if any check fails)
+4. Resolve all review threads
+5. Only mark PR ready for review if:
+   - All CI checks pass
+   - All review threads are resolved
+   - No merge conflicts exist
+6. If any condition fails, keep the PR in draft status
+```
+</IMPORTANT>
+
 ## Checking Delegation Availability
 
 ```python
