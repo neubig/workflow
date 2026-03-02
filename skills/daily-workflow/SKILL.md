@@ -113,8 +113,47 @@ curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
    - Replying to the review thread explaining the fix
    - Resolving the thread via the GitHub API
    - Do NOT list reviews as "needing attention" - resolve them yourself
-2. **Demonstrate Functionality** - Live test, not just unit tests
+
+2. **Provide Evidence in PR Description** - REQUIRED for all PRs:
+   
+   **For Bug Fixes** - Show before/after:
+   ```markdown
+   ## Evidence
+   
+   **Before (on main branch):**
+   ```
+   $ python -c "from openhands.tools import terminal"
+   ModuleNotFoundError: No module named 'fcntl'
+   ```
+   
+   **After (this PR):**
+   ```
+   $ python -c "from openhands.tools import terminal"
+   # No error - import succeeds
+   ```
+   ```
+   
+   **For Features** - Show it working:
+   ```markdown
+   ## Evidence
+   
+   **Feature in action:**
+   ```
+   $ openhands mcp add figma --transport http https://mcp.figma.com
+   ✓ Added Figma MCP server
+   
+   $ openhands mcp list
+   NAME    STATUS    URL
+   figma   enabled   https://mcp.figma.com
+   ```
+   ```
+
 3. **Iterate on Bot Reviews** - Check for new reviews after each fix, repeat until 0 unresolved
+
+<IMPORTANT>
+If evidence cannot be gathered due to missing resources (API keys, platforms, etc.),
+explain why in the PR description and list what's needed for manual verification.
+</IMPORTANT>
 
 ## Special Resources Output
 
