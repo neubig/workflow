@@ -22,7 +22,7 @@ Unit tests are NOT sufficient. PRs must demonstrate actual behavior in a live se
 
 ### Bug Fix PRs
 
-Demonstrate both states:
+Demonstrate both states and **add evidence to PR description**:
 
 1. **Before the fix** - Show the bug exists on the base branch:
    ```bash
@@ -38,16 +38,52 @@ Demonstrate both states:
    # Show bug no longer occurs
    ```
 
+3. **Add to PR description**:
+   ```markdown
+   ## Evidence
+   
+   **Before (on main):**
+   ```
+   $ python script.py
+   Error: Something broke
+   ```
+   
+   **After (this PR):**
+   ```
+   $ python script.py
+   Success!
+   ```
+   ```
+
 ### New Feature PRs
 
 1. Set up environment with PR changes
 2. Run the feature with real inputs
 3. Capture and document successful execution
-4. Show end-to-end behavior working
+4. **Add evidence to PR description**:
+   ```markdown
+   ## Evidence
+   
+   **Feature working:**
+   ```
+   $ my-new-command --flag
+   ✓ Feature executed successfully
+   Output: expected result
+   ```
+   ```
 
 ### PRs That Cannot Be Live Tested
 
-Keep in **draft** and provide categorized resource list:
+Keep in **draft** and add to PR description:
+
+```markdown
+## Evidence
+
+**Cannot be tested in current environment:**
+- Resource needed: Windows machine
+- Reason: Fix is for Windows-specific `fcntl` import error
+- Manual verification: Run `python -c "from openhands.tools import terminal"` on Windows
+```
 
 | Category | Examples |
 |----------|----------|

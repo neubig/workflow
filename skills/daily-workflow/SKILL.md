@@ -11,6 +11,8 @@ triggers:
 
 This skill implements Graham's specific daily workflow for managing development tasks.
 
+> **PR Workflow Details**: See [github-pr-workflow](../github-pr-workflow/SKILL.md) for complete PR handling instructions including live testing, evidence requirements, and review iteration.
+
 ## User Identifiers
 
 - **Linear**: `graham@openhands.dev`
@@ -23,9 +25,9 @@ The daily workflow consists of four phases executed in order:
 ```
 1. LINEAR TICKETS     →  Work on highest priority first
        ↓
-2. READY PRs          →  Check for reviews, ping reviewers if stale
+2. READY PRs          →  Check for reviews, move to draft if unresolved
        ↓  
-3. DRAFT PRs          →  Address feedback, demonstrate functionality
+3. DRAFT PRs          →  Address feedback per github-pr-workflow skill
        ↓
 4. ACTION ITEMS       →  Categorized list of items needing user help
 ```
@@ -54,7 +56,7 @@ curl -s -X POST https://api.linear.app/graphql \
 
 ### Tickets Requiring Manual Action
 
-Some tickets cannot be automated and should be added to a personal action list:
+Add to Phase 4 action items:
 - Tickets with only Slack links
 - "Contact X" or "Send email to Y" tasks
 - Discussion/meeting requests
@@ -69,31 +71,15 @@ curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
   | jq '.items[] | {repo: .repository_url | split("/") | .[-1], number: .number, title: .title}'
 ```
 
-### Check for Unresolved Reviews
-
-For each ready PR, check review status:
-```bash
-gh api graphql -f query='
-{
-  repository(owner: "OWNER", name: "REPO") {
-    pullRequest(number: PR_NUMBER) {
-      reviewThreads(first: 50) {
-        nodes { isResolved }
-      }
-    }
-  }
-}' | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length'
-```
-
 ### Decision Tree
 
 ```
 Ready PR
 ├── Has unresolved reviews?
-│   └── YES → Move to draft, address feedback
+│   └── YES → Move to draft, process in Phase 3
 │   └── NO → Ready for 2+ business days?
-│       └── YES → Ping reviewer on Slack (manual)
-│       └── NO → Wait
+│       └── YES → Add "ping reviewer" to Phase 4 action items
+│       └── NO → No action needed
 ```
 
 ## Phase 3: Draft PRs
@@ -108,87 +94,17 @@ curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
 
 ### Work on Draft PRs
 
-1. **Address ALL Review Comments** - The agent MUST resolve all unresolved review threads by:
-   - Making code changes to fix the issue
-   - Replying to the review thread explaining the fix
-   - Resolving the thread via the GitHub API
-   - Do NOT list reviews as "needing attention" - resolve them yourself
+**Follow the [github-pr-workflow](../github-pr-workflow/SKILL.md) skill**, which requires:
 
-2. **Provide Evidence in PR Description** - REQUIRED for all PRs:
-   
-   **For Bug Fixes** - Show before/after:
-   ```markdown
-   ## Evidence
-   
-   **Before (on main branch):**
-   ```
-   $ python -c "from openhands.tools import terminal"
-   ModuleNotFoundError: No module named 'fcntl'
-   ```
-   
-   **After (this PR):**
-   ```
-   $ python -c "from openhands.tools import terminal"
-   # No error - import succeeds
-   ```
-   ```
-   
-   **For Features** - Show it working:
-   ```markdown
-   ## Evidence
-   
-   **Feature in action:**
-   ```
-   $ openhands mcp add figma --transport http https://mcp.figma.com
-   ✓ Added Figma MCP server
-   
-   $ openhands mcp list
-   NAME    STATUS    URL
-   figma   enabled   https://mcp.figma.com
-   ```
-   ```
+1. **Address ALL review comments** - Make fixes, reply, resolve threads via API
+2. **Provide evidence** - Before/after for bugs, working demo for features
+3. **Iterate until 0 unresolved** - Bots may add new reviews after fixes
 
-3. **Iterate on Bot Reviews** - Check for new reviews after each fix, repeat until 0 unresolved
-
-<IMPORTANT>
-If evidence cannot be gathered due to missing resources (API keys, platforms, etc.),
-explain why in the PR description and list what's needed for manual verification.
-</IMPORTANT>
-
-## Special Resources Output
-
-When PRs cannot be live tested, always provide a categorized list:
-
-```markdown
-## Draft PRs Requiring Special Resources
-
-### 🖥️ Platform/Environment Access
-| PR | Description | Resource Needed |
-|----|-------------|-----------------|
-| repo#123 | Windows fix | **Windows machine** |
-
-### 🔑 API Keys / Credentials
-| PR | Description | Resource Needed |
-|----|-------------|-----------------|
-| repo#456 | New model | **API key** with access |
-
-### 🏗️ CI/CD Infrastructure
-| PR | Description | Resource Needed |
-|----|-------------|-----------------|
-| repo#789 | Jenkins config | **Jenkins server** |
-
-### 📊 External Services
-| PR | Description | Resource Needed |
-|----|-------------|-----------------|
-| repo#101 | Dataset integration | **Dataset access** |
-```
-
-After providing the list, ask:
-> Would you like me to work on any of these if you can provide the required resources?
+If a PR cannot be tested due to missing resources, add to Phase 4 action items.
 
 ## Phase 4: Categorized Action Items
 
-At the end of the workflow, ALWAYS provide a categorized summary of items requiring user help:
+At the end of the workflow, ALWAYS provide a categorized summary:
 
 ```markdown
 ## 📋 Action Items Requiring Your Help
@@ -198,6 +114,11 @@ At the end of the workflow, ALWAYS provide a categorized summary of items requir
 |------|---------------|
 | ALL-1234 | Ping reviewer on Slack (PR stale >2 days) |
 | ALL-5678 | Slack link needs manual review |
+
+### 📝 Content/Social Media
+| Item | Action Needed |
+|------|---------------|
+| ALL-2345 | Blog post requires writing |
 
 ### 🔑 Credentials / API Keys Needed
 | PR | Resource Needed |
@@ -226,9 +147,9 @@ After the list, ask:
 ## Important Notes
 
 <IMPORTANT>
-- ALWAYS end with the categorized action items list above
-- Slack pings are manual - include in action items for user
-- PRs requiring special resources MUST be categorized
-- Iterate on bot reviews until 0 unresolved
+- ALWAYS end with the categorized action items (Phase 4)
+- Follow github-pr-workflow skill for ALL PR work
+- Slack pings are manual - include in action items
+- Do NOT list reviews as "needing attention" - resolve them yourself
 - Ask for confirmation before working on unclear tickets
 </IMPORTANT>
