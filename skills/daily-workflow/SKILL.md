@@ -108,9 +108,13 @@ curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
 
 ### Work on Draft PRs
 
-1. **Reflect Review Comments** - Address feedback or explain why not
+1. **Address ALL Review Comments** - The agent MUST resolve all unresolved review threads by:
+   - Making code changes to fix the issue
+   - Replying to the review thread explaining the fix
+   - Resolving the thread via the GitHub API
+   - Do NOT list reviews as "needing attention" - resolve them yourself
 2. **Demonstrate Functionality** - Live test, not just unit tests
-3. **Iterate on Bot Reviews** - Check for new reviews after each fix
+3. **Iterate on Bot Reviews** - Check for new reviews after each fix, repeat until 0 unresolved
 
 ## Special Resources Output
 
