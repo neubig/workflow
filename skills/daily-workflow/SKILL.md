@@ -26,10 +26,6 @@ This outputs a markdown checklist with:
 
 Then work through the checklist, taking action on each item.
 
-> **PR Workflow Details**: See [github-pr-workflow](../github-pr-workflow/SKILL.md) for complete PR handling instructions including live testing, evidence requirements, and review iteration.
-
-> **Sub-Agent Delegation**: For substantial, self-contained tasks that would take several minutes or more, delegate to sub-agents. See [sub-agent-delegation](../sub-agent-delegation/SKILL.md) for instructions on using the DelegateTool or OpenHands Cloud API.
-
 ## User Identifiers
 
 - **Linear**: `graham@openhands.dev`
@@ -37,9 +33,11 @@ Then work through the checklist, taking action on each item.
 
 ## Workflow Overview
 
-The daily workflow consists of four phases executed in order:
+The daily workflow consists of five phases executed in order:
 
 ```
+0. PREPARATION        →  Read background skills before starting work
+       ↓
 1. LINEAR TICKETS     →  ACTUALLY WORK on highest priority first
        ↓
 2. READY PRs          →  Check for reviews, move to draft if unresolved
@@ -48,6 +46,22 @@ The daily workflow consists of four phases executed in order:
        ↓
 4. ACTION ITEMS       →  ONLY items that truly require human help
 ```
+
+## Phase 0: Preparation (Read First!)
+
+<IMPORTANT>
+**Before starting any work, read these background skills to understand the tools and processes:**
+
+1. **[sub-agent-delegation](../sub-agent-delegation/SKILL.md)** - Learn how to parallelize work by delegating tasks to sub-agents. Essential for handling multiple PRs or tickets efficiently.
+
+2. **[github-pr-workflow](../github-pr-workflow/SKILL.md)** - Complete PR handling instructions including:
+   - Live testing requirements and evidence gathering
+   - Review iteration loop (check → fix → resolve → repeat)
+   - GraphQL commands for resolving review threads
+   - When to mark PRs ready vs keep in draft
+
+**Do not skip this phase.** Understanding delegation enables parallel work on multiple PRs. Understanding the PR workflow ensures you iterate correctly until all reviews are resolved.
+</IMPORTANT>
 
 <IMPORTANT>
 **THIS IS AN ACTION-ORIENTED WORKFLOW, NOT A REPORTING WORKFLOW.**
@@ -173,52 +187,29 @@ curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
   | jq '.items[] | {repo: .repository_url | split("/") | .[-1], number: .number, title: .title}'
 ```
 
-### For Each Draft PR: CHECK AND ACT
+### For Each Draft PR: FIX AND MARK READY
 
 <IMPORTANT>
-**For EVERY draft PR, check if it can be marked ready for review.**
+**Follow the [github-pr-workflow](../github-pr-workflow/SKILL.md) skill for each draft PR.**
 
-A draft PR should be marked ready if BOTH conditions are met:
-1. **Evidence exists**: PR description has `## Evidence` section, OR it's content-only (docs, comments)
-2. **No unresolved reviews**: All review threads are resolved (count == 0)
+That skill covers:
+- Fixing failing CI/tests (don't just report them - fix them)
+- Gathering evidence for bug fixes and features
+- Iterating on review comments until resolved
+- When to mark ready vs keep in draft
 
-**If both conditions pass → Mark PR ready for review immediately.**
+**Key principle**: A PR should be marked ready only when BOTH conditions are met:
+1. Evidence exists (or it's content-only)
+2. No unresolved review threads
 </IMPORTANT>
 
-For draft PRs with unresolved feedback:
-1. Clone the repository
-2. Read ALL review comments
-3. Make the requested fixes
-4. Push commits addressing each comment
-5. Reply to review threads with commit references
-6. Resolve the threads via GraphQL API
-7. Mark PR ready for review
+### Parallelization
 
-**Follow the [github-pr-workflow](../github-pr-workflow/SKILL.md) skill**, which requires:
-
-1. **Address ALL review comments** - Make fixes, reply, resolve threads via API
-2. **Provide evidence** - Before/after for bugs, working demo for features
-3. **Iterate until 0 unresolved** - Bots may add new reviews after fixes
-
-**Parallelization**: If there are multiple draft PRs needing evidence or fixes:
+If there are multiple draft PRs needing work:
 1. Check if DelegateTool is available in your tool set, OR
 2. Check if `OPENHANDS_CLOUD_API_KEY` environment variable is set
-3. If either is available, delegate each PR to a sub-agent for parallel processing
+3. If either is available, delegate each PR to a sub-agent (see [sub-agent-delegation](../sub-agent-delegation/SKILL.md))
 4. If neither is available, work through PRs sequentially (note this in the summary)
-
-### PRs with Failing CI/Tests: FIX THEM
-
-<IMPORTANT>
-**If a PR has failing tests or CI, FIX THE FAILURES. Do not just report them.**
-
-1. Clone the repository and checkout the PR branch
-2. Run the failing tests locally to understand the failure
-3. Fix the code to make tests pass
-4. Push the fix
-5. Verify CI passes, then mark ready
-
-This is core development work - always attempt fixes before reporting blockers.
-</IMPORTANT>
 
 ### When to Add to Phase 4 (Rare Cases Only)
 
@@ -227,10 +218,7 @@ PRs remain in DRAFT **only if** evidence cannot be gathered due to:
 - Platform-specific testing (Windows, macOS) the agent can't do
 - External service access the agent lacks
 
-In these cases:
-1. Keep PR in draft status
-2. Add "## Evidence" section explaining what's needed for manual verification
-3. Add to Phase 4 action items under "🧪 QA Required (Human Verification)"
+In these cases: keep PR in draft, add "## Evidence" section explaining what's needed, and add to Phase 4.
 
 ## Phase 4: Complete Status Summary
 

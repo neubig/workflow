@@ -100,7 +100,9 @@ The delegate operation:
 
 Use when `OPENHANDS_CLOUD_API_KEY` is available. Creates separate cloud conversations that run independently.
 
-#### Start a Delegated Conversation
+**Documentation**: See [OpenHands Cloud API docs](https://docs.openhands.dev/openhands/usage/cloud/cloud-api) for the full API reference.
+
+#### Step 1: Start a Delegated Conversation (V1 API)
 
 ```bash
 curl -X POST "https://app.all-hands.dev/api/v1/app-conversations" \
@@ -114,48 +116,132 @@ curl -X POST "https://app.all-hands.dev/api/v1/app-conversations" \
   }'
 ```
 
-#### Response
+**Response** (returns a start task, not the conversation directly):
 
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "WORKING",
-  "app_conversation_id": "660e8400-e29b-41d4-a716-446655440001"
+  "status": "WORKING"
 }
 ```
 
-#### Check Conversation Status
+Start task status values:
+- `WORKING` - Initial processing
+- `WAITING_FOR_SANDBOX` - Waiting for sandbox allocation
+- `PREPARING_REPOSITORY` - Cloning repository  
+- `STARTING_CONVERSATION` - Starting the agent
+- `READY` - Conversation is active (check `app_conversation_id`)
+- `ERROR` - An error occurred
+
+#### Step 2: Poll Start Task Until Ready
 
 ```bash
-curl -s -H "Authorization: Bearer $OPENHANDS_CLOUD_API_KEY" \
-  "https://app.all-hands.dev/api/v1/app-conversations/$CONVERSATION_ID"
+curl -s "https://app.all-hands.dev/api/v1/app-conversations/start-tasks?ids=START_TASK_ID" \
+  -H "Authorization: Bearer $OPENHANDS_CLOUD_API_KEY"
 ```
 
-Status values:
-- `WORKING` - Initial processing
-- `WAITING_FOR_SANDBOX` - Waiting for sandbox
-- `PREPARING_REPOSITORY` - Cloning repository
-- `READY` - Conversation is active
-- `ERROR` - An error occurred
+**Response when ready:**
+```json
+[{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "READY",
+  "app_conversation_id": "660e8400-e29b-41d4-a716-446655440001"
+}]
+```
+
+#### Step 3: Check Conversation Execution Status
+
+Once you have the `app_conversation_id`, check if the agent has completed:
+
+```bash
+curl -s "https://app.all-hands.dev/api/v1/app-conversations?ids=CONVERSATION_ID" \
+  -H "Authorization: Bearer $OPENHANDS_CLOUD_API_KEY"
+```
+
+**Response:**
+```json
+[{
+  "id": "660e8400-e29b-41d4-a716-446655440001",
+  "sandbox_status": "RUNNING",
+  "execution_status": "running",
+  "selected_repository": "owner/repo"
+}]
+```
+
+**`execution_status` values:**
+- `idle` - Waiting for user input
+- `running` - Agent is actively working
+- `paused` - Conversation is paused
+- `waiting_for_confirmation` - Agent needs user confirmation
+- `error` - An error occurred
+- `finished` - Agent completed successfully
+
+**`sandbox_status` values:**
+- `STARTING` - Sandbox is starting up
+- `RUNNING` - Sandbox is active
+- `PAUSED` - Sandbox is paused (idle timeout)
+- `ERROR` - Sandbox error
+- `MISSING` - Sandbox no longer exists
+
+#### List All Conversations
+
+```bash
+curl -s "https://app.all-hands.dev/api/v1/app-conversations/search?limit=20" \
+  -H "Authorization: Bearer $OPENHANDS_CLOUD_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440001",
+      "sandbox_status": "RUNNING",
+      "execution_status": "finished",
+      "selected_repository": "owner/repo"
+    }
+  ],
+  "next_page_id": null
+}
+```
 
 #### Python Helper
 
 ```python
 import os
+import time
 import requests
 
-def delegate_to_cloud(task: str, repo: str) -> dict:
-    """Delegate a task to a new OpenHands Cloud conversation."""
+BASE_URL = "https://app.all-hands.dev"
+
+def get_session():
+    """Create authenticated session."""
     api_key = os.environ.get("OPENHANDS_CLOUD_API_KEY")
     if not api_key:
         raise ValueError("OPENHANDS_CLOUD_API_KEY not set")
+    session = requests.Session()
+    session.headers.update({
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    })
+    return session
+
+def delegate_to_cloud(task: str, repo: str, wait_for_ready: bool = True) -> dict:
+    """Delegate a task to a new OpenHands Cloud conversation (V1 API).
     
-    response = requests.post(
-        "https://app.all-hands.dev/api/v1/app-conversations",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        },
+    Args:
+        task: Task description for the agent
+        repo: Repository in 'owner/repo' format
+        wait_for_ready: If True, poll until conversation is ready
+        
+    Returns:
+        Dict with 'start_task_id' and 'conversation_id' (if ready)
+    """
+    session = get_session()
+    
+    # Step 1: Start the conversation
+    response = session.post(
+        f"{BASE_URL}/api/v1/app-conversations",
         json={
             "initial_message": {
                 "content": [{"type": "text", "text": task}]
@@ -163,11 +249,101 @@ def delegate_to_cloud(task: str, repo: str) -> dict:
             "selected_repository": repo
         }
     )
-    result = response.json()
-    conversation_id = result.get("app_conversation_id") or result.get("id")
+    response.raise_for_status()
+    start_task = response.json()
+    start_task_id = start_task["id"]
     
-    print(f"Delegated task to: https://app.all-hands.dev/conversations/{conversation_id}")
-    return result
+    result = {"start_task_id": start_task_id, "conversation_id": None}
+    
+    if not wait_for_ready:
+        return result
+    
+    # Step 2: Poll until ready
+    for _ in range(60):  # Max 5 minutes
+        response = session.get(
+            f"{BASE_URL}/api/v1/app-conversations/start-tasks",
+            params={"ids": start_task_id}
+        )
+        tasks = response.json()
+        if tasks and tasks[0].get("status") == "READY":
+            result["conversation_id"] = tasks[0].get("app_conversation_id")
+            print(f"Delegated task to: {BASE_URL}/conversations/{result['conversation_id']}")
+            return result
+        elif tasks and tasks[0].get("status") == "ERROR":
+            raise RuntimeError(f"Start task failed: {tasks[0]}")
+        time.sleep(5)
+    
+    raise TimeoutError("Timed out waiting for conversation to start")
+
+
+def get_conversation_status(conversation_id: str) -> dict:
+    """Get the current status of a conversation."""
+    session = get_session()
+    response = session.get(
+        f"{BASE_URL}/api/v1/app-conversations",
+        params={"ids": conversation_id}
+    )
+    response.raise_for_status()
+    conversations = response.json()
+    return conversations[0] if conversations else None
+
+
+def list_conversations(limit: int = 20) -> list:
+    """List recent conversations."""
+    session = get_session()
+    response = session.get(
+        f"{BASE_URL}/api/v1/app-conversations/search",
+        params={"limit": limit}
+    )
+    response.raise_for_status()
+    return response.json().get("items", [])
+
+
+def check_delegated_tasks(conversation_ids: list[str] = None) -> dict:
+    """Check status of delegated tasks.
+    
+    Args:
+        conversation_ids: List of conversation IDs to check.
+                         If None, lists recent conversations.
+    
+    Returns:
+        Dict with 'running', 'finished', and 'other' lists.
+    """
+    if conversation_ids:
+        # Batch get specific conversations
+        session = get_session()
+        response = session.get(
+            f"{BASE_URL}/api/v1/app-conversations",
+            params={"ids": ",".join(conversation_ids)}
+        )
+        conversations = response.json()
+    else:
+        conversations = list_conversations(limit=50)
+    
+    running = []
+    finished = []
+    other = []
+    
+    for conv in conversations:
+        if conv is None:
+            continue
+        info = {
+            "conversation_id": conv.get("id"),
+            "repository": conv.get("selected_repository", ""),
+            "sandbox_status": conv.get("sandbox_status"),
+            "execution_status": conv.get("execution_status"),
+            "url": f"{BASE_URL}/conversations/{conv.get('id')}"
+        }
+        
+        exec_status = conv.get("execution_status", "")
+        if exec_status == "running":
+            running.append(info)
+        elif exec_status == "finished":
+            finished.append(info)
+        else:
+            other.append(info)
+    
+    return {"running": running, "finished": finished, "other": other}
 ```
 
 ## Choosing a Method

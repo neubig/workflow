@@ -431,9 +431,143 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
     return sorted(tickets, key=lambda t: (t.priority, t.identifier))
 
 
+def _build_pr_graphql_fragment(alias: str, owner: str, repo: str, number: int) -> str:
+    """Build a GraphQL fragment for fetching a single PR's details."""
+    # Use single line format to avoid shell escaping issues
+    return (
+        f'{alias}: repository(owner: "{owner}", name: "{repo}") {{ '
+        f'pullRequest(number: {number}) {{ '
+        f'number title url body isDraft createdAt headRefName headRefOid '
+        f'files(first: 100) {{ nodes {{ path }} }} '
+        f'reviewThreads(first: 100) {{ nodes {{ isResolved comments(first: 1) {{ nodes {{ body }} }} }} }} '
+        f'reviews(first: 50) {{ nodes {{ state }} }} '
+        f'commits(last: 1) {{ nodes {{ commit {{ statusCheckRollup {{ contexts(first: 50) {{ nodes {{ ... on CheckRun {{ name conclusion }} }} }} }} }} }} }} '
+        f'timelineItems(first: 100, itemTypes: [READY_FOR_REVIEW_EVENT]) {{ nodes {{ ... on ReadyForReviewEvent {{ createdAt }} }} }} '
+        f'}} }}'
+    )
+
+
+def _parse_pr_from_graphql(repo_name: str, pr_data: dict[str, Any]) -> GitHubPR | None:
+    """Parse a PR from GraphQL response data."""
+    if not pr_data or not pr_data.get("pullRequest"):
+        return None
+
+    pr = pr_data["pullRequest"]
+    number = pr["number"]
+    pr_body = pr.get("body") or ""
+
+    # Extract changed files
+    files_nodes = pr.get("files", {}).get("nodes", [])
+    changed_files = [f.get("path", "") for f in files_nodes if f]
+
+    # Detect content-only PRs
+    content_extensions = {'.md', '.txt', '.rst', '.json', '.yaml', '.yml', '.toml'}
+    content_dirs = {'docs/', 'skills/', '.github/', 'examples/'}
+    is_content_only = False
+    if changed_files:
+        is_content_only = all(
+            any(f.endswith(ext) for ext in content_extensions) or
+            any(f.startswith(d) for d in content_dirs)
+            for f in changed_files
+        )
+
+    # Parse CI status from statusCheckRollup
+    ci_status = "unknown"
+    ci_failures: list[str] = []
+    commits = pr.get("commits", {}).get("nodes", [])
+    if commits:
+        rollup = commits[0].get("commit", {}).get("statusCheckRollup")
+        if rollup:
+            contexts = rollup.get("contexts", {}).get("nodes", [])
+            conclusions = [c.get("conclusion") for c in contexts if c]
+            ci_failures = [
+                c.get("name", "unknown")
+                for c in contexts
+                if c and c.get("conclusion") == "FAILURE"
+            ]
+            if not conclusions:
+                ci_status = "pending"
+            elif all(c in ("SUCCESS", "SKIPPED", None) for c in conclusions):
+                ci_status = "success"
+            elif "FAILURE" in conclusions:
+                ci_status = "failure"
+            else:
+                ci_status = "pending"
+
+    # Parse review threads
+    unresolved = 0
+    unresolved_details: list[str] = []
+    threads = pr.get("reviewThreads", {}).get("nodes", [])
+    for t in threads:
+        if t and not t.get("isResolved", True):
+            unresolved += 1
+            comments = t.get("comments", {}).get("nodes", [])
+            if comments:
+                body = comments[0].get("body", "")[:100]
+                unresolved_details.append(body)
+
+    # Parse approvals
+    reviews = pr.get("reviews", {}).get("nodes", [])
+    has_approvals = any(r and r.get("state") == "APPROVED" for r in reviews)
+
+    # Check for evidence
+    has_evidence = "## Evidence" in pr_body or "## Testing" in pr_body
+
+    # Parse ready_for_review date
+    ready_at = None
+    days_in_ready = 0
+    is_draft = pr.get("isDraft", False)
+    if not is_draft:
+        timeline_items = pr.get("timelineItems", {}).get("nodes", [])
+        if timeline_items:
+            last_ready = timeline_items[-1].get("createdAt", "")
+            if last_ready:
+                try:
+                    ready_at = datetime.fromisoformat(last_ready.replace("Z", "+00:00"))
+                    days_in_ready = (datetime.now(timezone.utc) - ready_at).days
+                except ValueError:
+                    pass
+
+    created_at = datetime.fromisoformat(pr["createdAt"].replace("Z", "+00:00"))
+
+    return GitHubPR(
+        repo=repo_name,
+        number=number,
+        title=pr["title"],
+        url=pr["url"],
+        is_draft=is_draft,
+        created_at=created_at,
+        head_branch=pr.get("headRefName", ""),
+        ready_at=ready_at,
+        ci_status=ci_status,
+        ci_failures=ci_failures,
+        has_approvals=has_approvals,
+        unresolved_threads=unresolved,
+        unresolved_thread_details=unresolved_details,
+        has_evidence=has_evidence,
+        days_in_ready=days_in_ready,
+        is_content_only=is_content_only,
+    )
+
+
+def _fetch_single_pr_graphql(repo_name: str, number: int) -> GitHubPR | None:
+    """Fetch a single PR using GraphQL. Fallback for batches that fail."""
+    owner, repo = repo_name.split("/")
+    query = "query { " + _build_pr_graphql_fragment("pr", owner, repo, number) + " }"
+    result = run_gh(["api", "graphql", "-f", f"query={query}"])
+
+    if not isinstance(result, dict) or "data" not in result:
+        return None
+
+    pr_data = result.get("data", {}).get("pr")
+    if pr_data:
+        return _parse_pr_from_graphql(repo_name, pr_data)
+    return None
+
+
 def fetch_github_prs(user: str) -> tuple[list[GitHubPR], list[GitHubPR]]:
-    """Fetch GitHub PRs authored by user."""
-    # Fetch all open PRs
+    """Fetch GitHub PRs authored by user using batched GraphQL queries."""
+    # Fetch all open PRs (basic info only)
     prs_data = run_gh(
         [
             "search",
@@ -443,7 +577,7 @@ def fetch_github_prs(user: str) -> tuple[list[GitHubPR], list[GitHubPR]]:
             "--state",
             "open",
             "--json",
-            "repository,number,title,url,isDraft,createdAt",
+            "repository,number",
             "--limit",
             "100",
         ]
@@ -452,196 +586,57 @@ def fetch_github_prs(user: str) -> tuple[list[GitHubPR], list[GitHubPR]]:
     if not isinstance(prs_data, list):
         return [], []
 
-    ready_prs = []
-    draft_prs = []
+    ready_prs: list[GitHubPR] = []
+    draft_prs: list[GitHubPR] = []
 
-    for pr_data in prs_data:
-        repo_name = pr_data["repository"]["nameWithOwner"]
-        number = pr_data["number"]
+    # Build batched GraphQL query for all PRs
+    # Use smaller batches (10) to reduce impact of permission errors
+    batch_size = 10
+    for batch_start in range(0, len(prs_data), batch_size):
+        batch = prs_data[batch_start:batch_start + batch_size]
 
-        print(f"  Processing {repo_name}#{number}...", file=sys.stderr)
+        # Build query fragments for this batch
+        fragments = []
+        pr_map: dict[str, tuple[str, int]] = {}  # alias -> (repo_name, number)
+        for i, pr_info in enumerate(batch):
+            repo_name = pr_info["repository"]["nameWithOwner"]
+            number = pr_info["number"]
+            owner, repo = repo_name.split("/")
+            alias = f"pr_{i}"
+            pr_map[alias] = (repo_name, number)
+            fragments.append(_build_pr_graphql_fragment(alias, owner, repo, number))
+            print(f"  Processing {repo_name}#{number}...", file=sys.stderr)
 
-        # Get detailed PR info including head SHA and branch
-        pr_detail = run_gh(
-            [
-                "api",
-                f"repos/{repo_name}/pulls/{number}",
-            ]
-        )
+        # Execute batched query
+        query = "query { " + " ".join(fragments) + " }"
+        result = run_gh(["api", "graphql", "-f", f"query={query}"])
 
-        head_sha = ""
-        head_branch = ""
-        pr_body = ""
-        changed_files: list[str] = []
-        if isinstance(pr_detail, dict):
-            head_sha = pr_detail.get("head", {}).get("sha", "")
-            head_branch = pr_detail.get("head", {}).get("ref", "")
-            pr_body = pr_detail.get("body", "") or ""
-
-        # Get changed files to detect content-only PRs
-        files_data = run_gh(
-            [
-                "api",
-                f"repos/{repo_name}/pulls/{number}/files",
-                "--jq",
-                "[.[].filename]",
-            ]
-        )
-        if isinstance(files_data, list):
-            changed_files = files_data
-
-        # Detect content-only PRs (docs, skills, markdown, config)
-        content_extensions = {'.md', '.txt', '.rst', '.json', '.yaml', '.yml', '.toml'}
-        content_dirs = {'docs/', 'skills/', '.github/', 'examples/'}
-        is_content_only = False
-        if changed_files:
-            is_content_only = all(
-                any(f.endswith(ext) for ext in content_extensions) or
-                any(f.startswith(d) for d in content_dirs)
-                for f in changed_files
-            )
-
-        # Get CI status and failures
-        ci_status = "unknown"
-        ci_failures: list[str] = []
-        if head_sha:
-            checks_data = run_gh(
-                [
-                    "api",
-                    f"repos/{repo_name}/commits/{head_sha}/check-runs",
-                ]
-            )
-            if isinstance(checks_data, dict):
-                check_runs = checks_data.get("check_runs", [])
-                conclusions = [c.get("conclusion") for c in check_runs]
-                ci_failures = [
-                    c.get("name", "unknown")
-                    for c in check_runs
-                    if c.get("conclusion") == "failure"
-                ]
-
-                if not conclusions:
-                    ci_status = "pending"
-                elif all(c in ("success", "skipped", None) for c in conclusions):
-                    ci_status = "success"
-                elif "failure" in conclusions:
-                    ci_status = "failure"
-                else:
-                    ci_status = "pending"
-
-        # Get review threads with details
-        owner, repo = repo_name.split("/")
-        threads_query = f"""
-        query {{
-            repository(owner: "{owner}", name: "{repo}") {{
-                pullRequest(number: {number}) {{
-                    reviewThreads(first: 100) {{
-                        nodes {{
-                            isResolved
-                            comments(first: 1) {{
-                                nodes {{ body }}
-                            }}
-                        }}
-                    }}
-                }}
-            }}
-        }}
-        """
-        threads_data = run_gh(
-            [
-                "api",
-                "graphql",
-                "-f",
-                f"query={threads_query}",
-            ]
-        )
-        unresolved = 0
-        unresolved_details: list[str] = []
-        if isinstance(threads_data, dict):
-            threads = (
-                threads_data.get("data", {})
-                .get("repository", {})
-                .get("pullRequest", {})
-                .get("reviewThreads", {})
-                .get("nodes", [])
-            )
-            for t in threads:
-                if not t.get("isResolved", True):
-                    unresolved += 1
-                    comments = t.get("comments", {}).get("nodes", [])
-                    if comments:
-                        body = comments[0].get("body", "")[:100]
-                        unresolved_details.append(body)
-
-        # Get approvals
-        reviews = run_gh(
-            [
-                "api",
-                f"repos/{repo_name}/pulls/{number}/reviews",
-            ]
-        )
-        has_approvals = False
-        if isinstance(reviews, list):
-            has_approvals = any(r.get("state") == "APPROVED" for r in reviews)
-
-        # Check for evidence in body
-        has_evidence = "## Evidence" in pr_body or "## Testing" in pr_body
-
-        # Get ready_for_review date from timeline
-        ready_at = None
-        days_in_ready = 0
-        if not pr_data["isDraft"]:
-            timeline = run_gh(
-                [
-                    "api",
-                    f"repos/{repo_name}/issues/{number}/timeline",
-                    "--paginate",
-                ]
-            )
-            if isinstance(timeline, list):
-                ready_events = [
-                    e for e in timeline if e.get("event") == "ready_for_review"
-                ]
-                if ready_events:
-                    last_ready = ready_events[-1].get("created_at", "")
-                    if last_ready:
-                        try:
-                            ready_at = datetime.fromisoformat(
-                                last_ready.replace("Z", "+00:00")
-                            )
-                            days_in_ready = (
-                                datetime.now(timezone.utc) - ready_at
-                            ).days
-                        except ValueError:
-                            pass
-
-        created_at = datetime.fromisoformat(
-            pr_data["createdAt"].replace("Z", "+00:00")
-        )
-
-        pr = GitHubPR(
-            repo=repo_name,
-            number=number,
-            title=pr_data["title"],
-            url=pr_data["url"],
-            is_draft=pr_data["isDraft"],
-            created_at=created_at,
-            head_branch=head_branch,
-            ready_at=ready_at,
-            ci_status=ci_status,
-            ci_failures=ci_failures,
-            has_approvals=has_approvals,
-            unresolved_threads=unresolved,
-            unresolved_thread_details=unresolved_details,
-            has_evidence=has_evidence,
-            days_in_ready=days_in_ready,
-            is_content_only=is_content_only,
-        )
-
-        if pr.is_draft:
-            draft_prs.append(pr)
+        if isinstance(result, dict) and "data" in result:
+            # Parse results from successful batch
+            data = result["data"]
+            for alias, (repo_name, _) in pr_map.items():
+                pr_data = data.get(alias)
+                if pr_data:
+                    pr = _parse_pr_from_graphql(repo_name, pr_data)
+                    if pr:
+                        if pr.is_draft:
+                            draft_prs.append(pr)
+                        else:
+                            ready_prs.append(pr)
         else:
-            ready_prs.append(pr)
+            # Batch failed - fall back to individual queries
+            print(f"  Batch failed, fetching individually...", file=sys.stderr)
+            for alias, (repo_name, number) in pr_map.items():
+                pr = _fetch_single_pr_graphql(repo_name, number)
+                if pr:
+                    if pr.is_draft:
+                        draft_prs.append(pr)
+                    else:
+                        ready_prs.append(pr)
+
+    # Sort by repo name and PR number for consistent output
+    ready_prs.sort(key=lambda p: (p.repo, p.number))
+    draft_prs.sort(key=lambda p: (p.repo, p.number))
 
     return ready_prs, draft_prs
 
