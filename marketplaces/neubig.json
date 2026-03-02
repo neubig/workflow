@@ -42,14 +42,19 @@
     "dependencies": {
         "general": [
             {
-                "name": "linear",
-                "source": "OpenHands/extensions/skills/linear",
-                "description": "General Linear API skill"
-            },
-            {
                 "name": "github",
                 "source": "OpenHands/extensions/skills/github",
-                "description": "General GitHub API skill"
+                "description": "General GitHub API skill for repository operations"
+            },
+            {
+                "name": "datadog",
+                "source": "OpenHands/extensions/skills/datadog",
+                "description": "Query Datadog logs, metrics, APM traces and monitors"
+            },
+            {
+                "name": "docker",
+                "source": "OpenHands/extensions/skills/docker",
+                "description": "Run Docker commands within container environments"
             }
         ]
     }
