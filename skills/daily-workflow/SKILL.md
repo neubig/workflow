@@ -16,8 +16,10 @@ This skill implements Graham's specific daily workflow for managing development 
 Run the fetch script to generate a structured checklist:
 
 ```bash
-python workflow/scripts/daily-workflow-fetch.py --github-user neubig
+LINEAR_API_KEY="$LINEAR_API_KEY" GITHUB_TOKEN="$GITHUB_TOKEN" python workflow/scripts/daily-workflow-fetch.py --github-user neubig
 ```
+
+> **Note**: The environment variables must be explicitly passed in the command to ensure they are properly injected from the secrets system.
 
 This outputs a markdown checklist with:
 - Linear tickets grouped by priority
