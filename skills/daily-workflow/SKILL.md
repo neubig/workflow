@@ -13,6 +13,8 @@ This skill implements Graham's specific daily workflow for managing development 
 
 > **PR Workflow Details**: See [github-pr-workflow](../github-pr-workflow/SKILL.md) for complete PR handling instructions including live testing, evidence requirements, and review iteration.
 
+> **Sub-Agent Delegation**: For substantial, self-contained tasks that would take several minutes or more, delegate to sub-agents. See [sub-agent-delegation](../sub-agent-delegation/SKILL.md) for instructions on using the DelegateTool or OpenHands Cloud API.
+
 ## User Identifiers
 
 - **Linear**: `graham@openhands.dev`
@@ -180,6 +182,7 @@ After the list, ask:
 - For stale PRs, report direct links so user can ping reviewers
 - Do NOT list reviews as "needing attention" - resolve them yourself
 - Ask for confirmation before working on unclear tickets
+- **Delegate substantial tasks**: If a ticket or PR involves work that would take several minutes or more and is self-contained (e.g., refactoring a module, running extensive tests, researching across repos), use [sub-agent-delegation](../sub-agent-delegation/SKILL.md) to parallelize work
 </IMPORTANT>
 
 ---

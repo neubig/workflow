@@ -8,6 +8,7 @@ This repository contains OpenHands skills for managing daily development workflo
 |-------|-------------|----------|
 | [daily-workflow](./skills/daily-workflow/SKILL.md) | Graham's daily workflow for Linear tickets and GitHub PRs | `daily workflow`, `my workflow`, `graham workflow` |
 | [github-pr-workflow](./skills/github-pr-workflow/SKILL.md) | Complete PR workflow with live testing and iterative review resolution | `pr review`, `bot review`, `review iteration`, `live test` |
+| [sub-agent-delegation](./skills/sub-agent-delegation/SKILL.md) | Delegate substantial tasks to sub-agents via DelegateTool or Cloud API | `delegate task`, `sub-agent`, `spawn agent`, `parallel task` |
 
 ## Marketplaces
 
