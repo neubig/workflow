@@ -141,11 +141,49 @@ When PRs cannot be live tested, always provide a categorized list:
 After providing the list, ask:
 > Would you like me to work on any of these if you can provide the required resources?
 
+## Final Output: Categorized Action Items
+
+At the end of the workflow, ALWAYS provide a categorized summary of items requiring user help:
+
+```markdown
+## 📋 Action Items Requiring Your Help
+
+### 🗣️ Manual Communication (Slack/Email)
+| Item | Action Needed |
+|------|---------------|
+| ALL-1234 | Ping reviewer on Slack (PR stale >2 days) |
+| ALL-5678 | Slack link needs manual review |
+
+### 🔑 Credentials / API Keys Needed
+| PR | Resource Needed |
+|----|-----------------|
+| repo#123 | API key for new model testing |
+
+### 🖥️ Platform / Environment Access
+| PR | Resource Needed |
+|----|-----------------|
+| repo#456 | Windows machine for testing |
+
+### 🏗️ CI/CD / Infrastructure
+| PR | Resource Needed |
+|----|-----------------|
+| repo#789 | Jenkins server access |
+
+### ❓ Clarification Needed
+| Item | Question |
+|------|----------|
+| ALL-9999 | Description unclear - what is the expected behavior? |
+```
+
+After the list, ask:
+> Would you like me to work on any of these if you can provide the required resources or clarification?
+
 ## Important Notes
 
 <IMPORTANT>
-- Always ask for confirmation before working on unclear tickets
-- Slack pings are manual - add to action list for user
-- PRs requiring special resources MUST provide categorized list (see above)
+- ALWAYS end with the categorized action items list above
+- Slack pings are manual - include in action items for user
+- PRs requiring special resources MUST be categorized
 - Iterate on bot reviews until 0 unresolved
+- Ask for confirmation before working on unclear tickets
 </IMPORTANT>
