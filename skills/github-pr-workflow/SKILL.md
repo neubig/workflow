@@ -129,27 +129,31 @@ These can be marked ready without evidence:
 │  1. Check PR readiness requirements:                         │
 │     a. Evidence in PR description? (see Part 1)              │
 │     b. Unresolved review comments == 0?                      │
+│     c. CI checks passing?                                    │
 │     ↓                                                       │
-│  2. If EITHER requirement fails:                             │
+│  2. If ANY requirement fails:                                │
 │     a. Move PR to draft (if ready)                          │
 │     b. Add/update Evidence section if missing                │
 │     c. Address each unresolved review comment                │
-│     d. Push fixes                                           │
-│     e. Reply to and resolve review threads                  │
-│     f. Mark PR ready                                        │
-│     g. GOTO step 1 (bot may review new code!)               │
+│     d. Fix CI failures                                       │
+│     e. Push fixes                                           │
+│     f. Reply to and resolve review threads                  │
+│     g. Wait for CI to complete                              │
+│     h. Mark PR ready                                        │
+│     i. GOTO step 1 (bot may review new code!)               │
 │     ↓                                                       │
-│  3. If BOTH requirements pass:                               │
+│  3. If ALL requirements pass:                                │
 │     ✓ PR is ready for human review                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 <IMPORTANT>
-A PR must be in DRAFT status unless BOTH conditions are met:
+A PR must be in DRAFT status unless ALL conditions are met:
 1. **Evidence exists**: PR description contains an `## Evidence` section with concrete proof the changes work (before/after for bugs, working demo for features), OR it's a content-only PR
 2. **No unresolved reviews**: All review threads are resolved
+3. **CI passes**: All required CI checks are passing
 
-If either condition fails, the PR MUST remain in or be moved to draft status.
+If ANY condition fails, the PR MUST remain in or be moved to draft status.
 </IMPORTANT>
 
 <IMPORTANT>
@@ -243,11 +247,25 @@ mutation {
 }'
 ```
 
+## Check CI Status
+
+```bash
+gh pr checks OWNER/REPO --pr PR_NUMBER
+```
+
+Or via API:
+```bash
+gh api repos/OWNER/REPO/commits/$(gh api repos/OWNER/REPO/pulls/PR_NUMBER --jq '.head.sha')/check-runs \
+  --jq '.check_runs[] | "\(.name): \(.conclusion // .status)"'
+```
+
 ## Mark PR Ready for Review
 
-Only mark ready when BOTH conditions are satisfied:
+Only mark ready when ALL conditions are satisfied:
 1. Evidence section exists in PR description (or it's a content-only PR)
 2. All review threads are resolved
+3. All required CI checks are passing
+
 ```bash
 PR_ID=$(gh api repos/OWNER/REPO/pulls/PR_NUMBER --jq '.node_id')
 
@@ -261,13 +279,14 @@ mutation {
 
 ## Batch Check Multiple PRs
 
-Check all your ready PRs for unresolved reviews:
+Check all your ready PRs for unresolved reviews and CI status:
 ```bash
 for pr_info in "Owner/Repo/123" "Owner2/Repo2/456"; do
   owner=$(echo $pr_info | cut -d'/' -f1)
   repo=$(echo $pr_info | cut -d'/' -f2)
   num=$(echo $pr_info | cut -d'/' -f3)
   
+  # Check unresolved reviews
   unresolved=$(gh api graphql -f query="
     { repository(owner: \"$owner\", name: \"$repo\") { 
         pullRequest(number: $num) { 
@@ -276,10 +295,18 @@ for pr_info in "Owner/Repo/123" "Owner2/Repo2/456"; do
       } 
     }" | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length')
   
+  # Check CI status
+  ci_failed=$(gh pr checks $num --repo $owner/$repo 2>/dev/null | grep -c "fail\|error" || echo "0")
+  ci_pending=$(gh pr checks $num --repo $owner/$repo 2>/dev/null | grep -c "pending\|queued" || echo "0")
+  
   if [ "$unresolved" != "0" ]; then
-    echo "⚠️  $owner/$repo#$num: $unresolved unresolved"
+    echo "⚠️  $owner/$repo#$num: $unresolved unresolved reviews"
+  elif [ "$ci_failed" != "0" ]; then
+    echo "❌ $owner/$repo#$num: CI failing"
+  elif [ "$ci_pending" != "0" ]; then
+    echo "⏳ $owner/$repo#$num: CI pending"
   else
-    echo "✅ $owner/$repo#$num: OK"
+    echo "✅ $owner/$repo#$num: Ready"
   fi
 done
 ```
@@ -287,7 +314,9 @@ done
 ## Best Practices
 
 1. **Always iterate**: Don't assume resolving reviews means you're done
-2. **Check after marking ready**: Bots often trigger on PR status changes
-3. **Reply before resolving**: Document what you did or why you declined
-4. **Batch operations**: Check all PRs at once to catch issues early
-5. **Track iterations**: Note how many cycles a PR took for process improvement
+2. **Wait for CI**: Always wait for CI to complete before marking ready
+3. **Fix CI first**: Address CI failures before spending time on reviews (code may change)
+4. **Check after marking ready**: Bots often trigger on PR status changes
+5. **Reply before resolving**: Document what you did or why you declined
+6. **Batch operations**: Check all PRs at once to catch issues early
+7. **Track iterations**: Note how many cycles a PR took for process improvement
