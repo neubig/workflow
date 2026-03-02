@@ -433,7 +433,12 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
             )
         )
 
-    return sorted(tickets, key=lambda t: (t.priority, t.identifier))
+    # Linear priority: 1=Urgent, 2=High, 3=Medium, 4=Low, 0=No priority
+    # Sort so Urgent (1) comes first, No priority (0) comes last
+    def priority_sort_key(t: LinearTicket) -> tuple[int, str]:
+        return (t.priority if t.priority > 0 else 99, t.identifier)
+
+    return sorted(tickets, key=priority_sort_key)
 
 
 def _build_pr_graphql_fragment(alias: str, owner: str, repo: str, number: int) -> str:
