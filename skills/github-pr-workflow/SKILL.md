@@ -130,17 +130,19 @@ These can be marked ready without evidence:
 │     a. Evidence in PR description? (see Part 1)              │
 │     b. Unresolved review comments == 0?                      │
 │     c. CI checks passing?                                    │
+│     d. No merge conflicts?                                   │
 │     ↓                                                       │
 │  2. If ANY requirement fails:                                │
 │     a. Move PR to draft (if ready)                          │
 │     b. Add/update Evidence section if missing                │
 │     c. Address each unresolved review comment                │
 │     d. Fix CI failures                                       │
-│     e. Push fixes                                           │
-│     f. Reply to and resolve review threads                  │
-│     g. Wait for CI to complete                              │
-│     h. Mark PR ready                                        │
-│     i. GOTO step 1 (bot may review new code!)               │
+│     e. Resolve merge conflicts (rebase or merge from base)   │
+│     f. Push fixes                                           │
+│     g. Reply to and resolve review threads                  │
+│     h. Wait for CI to complete                              │
+│     i. Mark PR ready                                        │
+│     j. GOTO step 1 (bot may review new code!)               │
 │     ↓                                                       │
 │  3. If ALL requirements pass:                                │
 │     ✓ PR is ready for human review                          │
@@ -152,6 +154,7 @@ A PR must be in DRAFT status unless ALL conditions are met:
 1. **Evidence exists**: PR description contains an `## Evidence` section with concrete proof the changes work (before/after for bugs, working demo for features), OR it's a content-only PR
 2. **No unresolved reviews**: All review threads are resolved
 3. **CI passes**: All required CI checks are passing
+4. **No merge conflicts**: The PR can be cleanly merged into the base branch
 
 If ANY condition fails, the PR MUST remain in or be moved to draft status.
 </IMPORTANT>
@@ -259,12 +262,51 @@ gh api repos/OWNER/REPO/commits/$(gh api repos/OWNER/REPO/pulls/PR_NUMBER --jq '
   --jq '.check_runs[] | "\(.name): \(.conclusion // .status)"'
 ```
 
+## Check for Merge Conflicts
+
+```bash
+gh api repos/OWNER/REPO/pulls/PR_NUMBER --jq '.mergeable_state, .mergeable'
+```
+
+- `mergeable: true` and `mergeable_state: "clean"` = No conflicts
+- `mergeable: false` or `mergeable_state: "dirty"` = Has conflicts that must be resolved
+
+## Resolve Merge Conflicts
+
+When a PR has merge conflicts, resolve them by rebasing or merging:
+
+```bash
+# Fetch latest changes
+git fetch origin
+
+# Option 1: Rebase onto base branch (preferred for clean history)
+git checkout pr-branch
+git rebase origin/main
+# Resolve any conflicts manually, then:
+git add .
+git rebase --continue
+git push --force-with-lease origin pr-branch
+
+# Option 2: Merge base branch into PR branch
+git checkout pr-branch
+git merge origin/main
+# Resolve any conflicts manually, then:
+git add .
+git commit -m "Merge main to resolve conflicts"
+git push origin pr-branch
+```
+
+<IMPORTANT>
+After resolving merge conflicts, CI will re-run. Always wait for CI to complete before marking the PR ready for review.
+</IMPORTANT>
+
 ## Mark PR Ready for Review
 
 Only mark ready when ALL conditions are satisfied:
 1. Evidence section exists in PR description (or it's a content-only PR)
 2. All review threads are resolved
 3. All required CI checks are passing
+4. No merge conflicts exist
 
 ```bash
 PR_ID=$(gh api repos/OWNER/REPO/pulls/PR_NUMBER --jq '.node_id')
@@ -279,7 +321,7 @@ mutation {
 
 ## Batch Check Multiple PRs
 
-Check all your ready PRs for unresolved reviews and CI status:
+Check all your ready PRs for unresolved reviews, CI status, and merge conflicts:
 ```bash
 for pr_info in "Owner/Repo/123" "Owner2/Repo2/456"; do
   owner=$(echo $pr_info | cut -d'/' -f1)
@@ -299,8 +341,13 @@ for pr_info in "Owner/Repo/123" "Owner2/Repo2/456"; do
   ci_failed=$(gh pr checks $num --repo $owner/$repo 2>/dev/null | grep -c "fail\|error" || echo "0")
   ci_pending=$(gh pr checks $num --repo $owner/$repo 2>/dev/null | grep -c "pending\|queued" || echo "0")
   
+  # Check for merge conflicts
+  mergeable=$(gh api repos/$owner/$repo/pulls/$num --jq '.mergeable // "unknown"' 2>/dev/null)
+  
   if [ "$unresolved" != "0" ]; then
     echo "⚠️  $owner/$repo#$num: $unresolved unresolved reviews"
+  elif [ "$mergeable" = "false" ]; then
+    echo "🔀 $owner/$repo#$num: Has merge conflicts"
   elif [ "$ci_failed" != "0" ]; then
     echo "❌ $owner/$repo#$num: CI failing"
   elif [ "$ci_pending" != "0" ]; then
@@ -316,7 +363,8 @@ done
 1. **Always iterate**: Don't assume resolving reviews means you're done
 2. **Wait for CI**: Always wait for CI to complete before marking ready
 3. **Fix CI first**: Address CI failures before spending time on reviews (code may change)
-4. **Check after marking ready**: Bots often trigger on PR status changes
-5. **Reply before resolving**: Document what you did or why you declined
-6. **Batch operations**: Check all PRs at once to catch issues early
-7. **Track iterations**: Note how many cycles a PR took for process improvement
+4. **Resolve conflicts promptly**: Fix merge conflicts as soon as they appear to avoid complex rebases
+5. **Check after marking ready**: Bots often trigger on PR status changes
+6. **Reply before resolving**: Document what you did or why you declined
+7. **Batch operations**: Check all PRs at once to catch issues early
+8. **Track iterations**: Note how many cycles a PR took for process improvement
