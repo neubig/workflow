@@ -378,3 +378,30 @@ sudo docker ps  # Verify it's running
 ```
 
 See the [docker skill](https://github.com/OpenHands/extensions/tree/main/skills/docker) for more details.
+
+### How do I investigate Datadog errors or monitoring issues?
+
+The agent has Datadog access via environment variables (`DD_API_KEY`, `DD_APP_KEY`, `DD_SITE`). Linear tickets about Datadog errors or monitoring issues should be investigated directly - do NOT add them to Phase 4 as "requiring access".
+
+See the [datadog skill](https://github.com/OpenHands/extensions/tree/main/skills/datadog) for canonical instructions on:
+- Querying logs
+- Querying metrics
+- Querying APM traces
+- Listing monitors
+
+**Example**: Query recent errors:
+```bash
+curl -s -X POST "https://api.${DD_SITE}/api/v2/logs/events/search" \
+  -H "DD-API-KEY: ${DD_API_KEY}" \
+  -H "DD-APPLICATION-KEY: ${DD_APP_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filter": {
+      "query": "status:error",
+      "from": "now-1h",
+      "to": "now"
+    },
+    "sort": "-timestamp",
+    "page": {"limit": 50}
+  }' | jq .
+```
