@@ -74,6 +74,14 @@ Demonstrate both states and **add evidence to PR description**:
 
 ### PRs That Cannot Be Live Tested
 
+<IMPORTANT>
+PRs without evidence MUST remain in DRAFT status. Never mark a PR ready for review unless:
+1. Evidence is provided in the PR description, OR
+2. It's a content-only PR (docs, comments, changelog)
+
+If evidence cannot be gathered, the PR requires human QA and must be added to the action items list.
+</IMPORTANT>
+
 Keep in **draft** and add to PR description:
 
 ```markdown
@@ -82,7 +90,10 @@ Keep in **draft** and add to PR description:
 **Cannot be tested in current environment:**
 - Resource needed: Windows machine
 - Reason: Fix is for Windows-specific `fcntl` import error
-- Manual verification: Run `python -c "from openhands.tools import terminal"` on Windows
+- Manual verification steps:
+  1. Checkout this branch on Windows
+  2. Run `python -c "from openhands.tools import terminal"`
+  3. Verify no ModuleNotFoundError occurs
 ```
 
 | Category | Examples |
@@ -94,6 +105,7 @@ Keep in **draft** and add to PR description:
 
 ### Content-Only PRs (No Testing Needed)
 
+These can be marked ready without evidence:
 - Documentation, README, blog posts
 - Comments/docstrings
 - Changelog updates

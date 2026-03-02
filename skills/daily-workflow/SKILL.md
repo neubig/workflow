@@ -100,7 +100,12 @@ curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
 2. **Provide evidence** - Before/after for bugs, working demo for features
 3. **Iterate until 0 unresolved** - Bots may add new reviews after fixes
 
-If a PR cannot be tested due to missing resources, add to Phase 4 action items.
+<IMPORTANT>
+PRs without evidence MUST remain in DRAFT. If evidence cannot be gathered:
+1. Keep PR in draft status
+2. Add "## Evidence" section explaining what's needed for manual verification
+3. Add to Phase 4 action items under "🧪 QA Required (Human Verification)"
+</IMPORTANT>
 
 ## Phase 4: Categorized Action Items
 
@@ -108,6 +113,12 @@ At the end of the workflow, ALWAYS provide a categorized summary:
 
 ```markdown
 ## 📋 Action Items Requiring Your Help
+
+### 🧪 QA Required (Human Verification)
+| PR | Why | Verification Steps |
+|----|-----|-------------------|
+| repo#123 | Windows-only fix | 1. Checkout branch 2. Run X on Windows 3. Verify Y |
+| repo#456 | Needs API key | 1. Set API_KEY env 2. Run test suite 3. Check output |
 
 ### 🗣️ Manual Communication (Slack/Email)
 | Item | Action Needed |
