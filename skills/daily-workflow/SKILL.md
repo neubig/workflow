@@ -142,13 +142,56 @@ curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
 
 ### Decision Tree
 
+<IMPORTANT>
+**Check ALL conditions for each Ready PR. Move to draft if ANY condition fails:**
+1. Unresolved review comments
+2. CI failures
+3. Merge conflicts
+
+Do NOT only check reviews - a PR with passing reviews but failing CI must also be moved to draft.
+</IMPORTANT>
+
 ```
 Ready PR
-├── Has unresolved reviews?
-│   └── YES → Move to draft, process in Phase 3
-│   └── NO → Ready for 2+ business days?
-│       └── YES → Check and report stale PRs (see below)
-│       └── NO → No action needed
+├── Has unresolved reviews? ─────────────────┐
+│   └── YES → Move to draft                  │
+├── Has CI failures? ────────────────────────┼─→ Process in Phase 3
+│   └── YES → Move to draft                  │
+├── Has merge conflicts (mergeable=false)? ──┘
+│   └── YES → Move to draft
+└── ALL conditions pass?
+    └── YES → Ready for 2+ business days?
+        └── YES → Check and report stale PRs (see below)
+        └── NO → No action needed
+```
+
+### Batch Check All Conditions
+
+```bash
+# For each ready PR, check all conditions at once
+for pr_info in "Owner/Repo/123"; do
+  owner=$(echo $pr_info | cut -d'/' -f1)
+  repo=$(echo $pr_info | cut -d'/' -f2)
+  num=$(echo $pr_info | cut -d'/' -f3)
+  
+  # Check unresolved reviews
+  unresolved=$(gh api graphql -f query="{ repository(owner: \"$owner\", name: \"$repo\") { pullRequest(number: $num) { reviewThreads(first: 50) { nodes { isResolved } } } } }" | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length')
+  
+  # Check merge conflicts
+  mergeable=$(gh api repos/$owner/$repo/pulls/$num --jq '.mergeable_state + " (" + (.mergeable | tostring) + ")"')
+  
+  # Check CI status
+  ci_failures=$(gh pr checks $num --repo $owner/$repo 2>&1 | grep -c "fail\|error" || echo "0")
+  
+  echo "$owner/$repo#$num: reviews=$unresolved, mergeable=$mergeable, ci_failures=$ci_failures"
+  
+  # Move to draft if ANY condition fails
+  if [ "$unresolved" != "0" ] || [ "$ci_failures" != "0" ] || echo "$mergeable" | grep -q "false"; then
+    PR_ID=$(gh api repos/$owner/$repo/pulls/$num --jq '.node_id')
+    gh api graphql -f query="mutation { convertPullRequestToDraft(input: {pullRequestId: \"$PR_ID\"}) { pullRequest { isDraft } } }"
+    echo "  → Moved to draft"
+  fi
+done
 ```
 
 ### Check for Stale PRs
