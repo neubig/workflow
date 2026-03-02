@@ -78,9 +78,26 @@ Ready PR
 ├── Has unresolved reviews?
 │   └── YES → Move to draft, process in Phase 3
 │   └── NO → Ready for 2+ business days?
-│       └── YES → Add "ping reviewer" to Phase 4 action items
+│       └── YES → Check and report stale PRs (see below)
 │       └── NO → No action needed
 ```
+
+### Check for Stale PRs
+
+The agent checks PR creation dates and reports stale PRs with direct links:
+
+```bash
+# Check PR age and report if stale
+gh pr list --author neubig --state open --json number,title,createdAt,url \
+  | jq -r '.[] | select((now - (.createdAt | fromdateiso8601)) / 86400 > 2) | "\(.url) - \(.title) (created \((now - (.createdAt | fromdateiso8601)) / 86400 | floor) days ago)"'
+```
+
+The agent will report:
+> **Stale PRs (>2 days without review):**
+> - https://github.com/org/repo/pull/123 - Fix bug (created 5 days ago)
+> - https://github.com/org/repo/pull/456 - Add feature (created 3 days ago)
+>
+> Please ping reviewers on Slack for these PRs.
 
 ## Phase 3: Draft PRs
 
@@ -160,7 +177,32 @@ After the list, ask:
 <IMPORTANT>
 - ALWAYS end with the categorized action items (Phase 4)
 - Follow github-pr-workflow skill for ALL PR work
-- Slack pings are manual - include in action items
+- For stale PRs, report direct links so user can ping reviewers
 - Do NOT list reviews as "needing attention" - resolve them yourself
 - Ask for confirmation before working on unclear tickets
 </IMPORTANT>
+
+---
+
+## FAQ
+
+### How do I run evaluations without local infrastructure?
+
+Use the OpenHands CI system. See [eval-with-ci](../eval-with-ci/SKILL.md) skill.
+
+**Quick method**: Add a label to a PR in `OpenHands/software-agent-sdk`:
+- `run-eval-1` - 1 instance (sanity check)
+- `run-eval-50` - 50 instances (standard)
+
+**Manual dispatch**: Use the [Run Eval workflow](https://github.com/OpenHands/software-agent-sdk/actions/workflows/run-eval.yml) with custom parameters.
+
+### What if I can't test a PR locally?
+
+1. Keep the PR in **draft**
+2. Add an `## Evidence` section explaining what's needed
+3. Add to Phase 4 action items under "🧪 QA Required"
+4. Include specific verification steps for the human
+
+### How do I know which PRs need reviewer pings?
+
+The agent checks all ready PRs and reports those >2 days old with direct links. The user then pings reviewers on Slack manually.
