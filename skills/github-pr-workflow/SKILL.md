@@ -72,17 +72,27 @@ Demonstrate both states and **add evidence to PR description**:
    ```
    ```
 
-### PRs That Cannot Be Live Tested
+### PRs That Need Evidence: TRY TO GATHER IT
 
 <IMPORTANT>
-PRs without evidence MUST remain in DRAFT status. Never mark a PR ready for review unless:
-1. Evidence is provided in the PR description, OR
-2. It's a content-only PR (docs, comments, changelog)
+**Your job is to TRY to gather evidence, not just report that it's missing.**
 
-If evidence cannot be gathered, the PR requires human QA and must be added to the action items list.
+For each PR without evidence:
+1. Clone the repository and checkout the PR branch
+2. Read the code changes to understand what needs to be demonstrated
+3. Attempt to run/test the changes to gather evidence
+4. If successful, add the evidence to the PR description and mark ready
+5. If you tried but FAILED, document:
+   - What you tried
+   - Why it failed
+   - What specific resource/access is needed for human QA
+
+Only add to action items if you genuinely cannot gather evidence after trying.
 </IMPORTANT>
 
-Keep in **draft** and add to PR description:
+### When Evidence Truly Cannot Be Gathered
+
+Keep in **draft** and add to PR description explaining what you tried:
 
 ```markdown
 ## Evidence
