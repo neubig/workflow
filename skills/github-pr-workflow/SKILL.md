@@ -116,9 +116,27 @@ Keep in **draft** and add to PR description explaining what you tried:
 ### Content-Only PRs (No Testing Needed)
 
 These can be marked ready without evidence:
-- Documentation, README, blog posts
 - Comments/docstrings
 - Changelog updates
+- Pure prose (blog posts, announcements)
+
+### Documentation & Skills PRs (Evidence Required)
+
+Skills and documentation that contain **instructions or workflows** need evidence that the instructions actually work:
+
+```markdown
+## Evidence
+
+**Verified workflow works:**
+```
+$ LINEAR_API_KEY="$LINEAR_API_KEY" python workflow/scripts/daily-workflow-fetch.py
+Fetching Linear tickets...
+  Found 33 tickets
+✓ Script executed successfully
+```
+```
+
+This ensures users won't follow broken instructions.
 
 ---
 
