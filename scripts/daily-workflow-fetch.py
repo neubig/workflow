@@ -237,7 +237,12 @@ class WorkflowChecklist:
             for t in self.linear_tickets:
                 by_priority.setdefault(t.priority, []).append(t)
 
-            for priority in sorted(by_priority.keys()):
+            # Linear priority: 1=Urgent, 2=High, 3=Medium, 4=Low, 0=No priority
+            # Sort so Urgent (1) comes first, No priority (0) comes last
+            def priority_sort_key(p: int) -> int:
+                return p if p > 0 else 99  # Move "No priority" (0) to end
+
+            for priority in sorted(by_priority.keys(), key=priority_sort_key):
                 tickets = by_priority[priority]
                 label = tickets[0].priority_label if tickets else "Unknown"
                 lines.append(f"### {label} Priority")
