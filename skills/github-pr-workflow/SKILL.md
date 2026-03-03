@@ -386,3 +386,26 @@ done
 6. **Reply before resolving**: Document what you did or why you declined
 7. **Batch operations**: Check all PRs at once to catch issues early
 8. **Track iterations**: Note how many cycles a PR took for process improvement
+
+## Waiting for CI After Pushing Fixes
+
+<IMPORTANT>
+**After pushing a fix, wait at least 5 minutes before checking CI status again.**
+
+CI pipelines take time to run. Do NOT immediately mark a PR ready after pushing - wait for CI to complete:
+
+1. Push your fix
+2. Wait 5 minutes (or use `sleep 300`)
+3. Check CI status: `gh pr checks REPO --pr NUMBER`
+4. If still pending, wait another 2-3 minutes
+5. Only mark ready once ALL CI checks show pass/fail status (not pending)
+
+```bash
+# After pushing a fix, wait and verify CI
+git push origin branch-name
+echo "Waiting 5 minutes for CI..."
+sleep 300
+gh pr checks $num --repo $owner/$repo
+# If all passing, then mark ready
+```
+</IMPORTANT>
