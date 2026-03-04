@@ -234,19 +234,17 @@ curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
 
 ### For Each Draft PR: FIX AND MARK READY
 
-<IMPORTANT>
 **Follow the [github-pr-workflow](../github-pr-workflow/SKILL.md) skill for each draft PR.**
 
 That skill covers:
 - Fixing failing CI/tests (don't just report them - fix them)
-- Gathering evidence for bug fixes and features
+- Gathering evidence for bug fixes and features (IMPORTANT: evidence is required for ALL non-trivial PRs - if you can't gather it, keep in draft and add to Phase 4)
 - Iterating on review comments until resolved
 - When to mark ready vs keep in draft
 
 **Key principle**: A PR should be marked ready only when BOTH conditions are met:
 1. Evidence exists (or it's content-only)
 2. No unresolved review threads
-</IMPORTANT>
 
 ### Parallelization
 
@@ -256,9 +254,9 @@ If there are multiple draft PRs needing work:
 3. If either is available, delegate each PR to a sub-agent (see [sub-agent-delegation](../sub-agent-delegation/SKILL.md))
 4. If neither is available, work through PRs sequentially (note this in the summary)
 
-### When to Add to Phase 4 (Rare Cases Only)
+### When to Add to Phase 4
 
-PRs remain in DRAFT **only if** evidence cannot be gathered due to:
+PRs remain in DRAFT if evidence cannot be gathered due to:
 - Missing credentials the agent doesn't have
 - Platform-specific testing (Windows, macOS) the agent can't do
 - External service access the agent lacks
@@ -304,7 +302,7 @@ List EVERY item examined with its current status. **Include a link to each item.
 
 ### Section 2: Items Requiring Human Help
 
-Only items the agent literally cannot do. **Include links.**
+All items the agent cannot do. Do NOT include items that simply have issues like failing CI, these should be fixed by the agent.
 
 ```markdown
 ## 📋 Action Items Requiring Your Help
@@ -348,6 +346,15 @@ After the summary, confirm:
 
 ## FAQ
 
+### What services can you not access?
+
+If you do not have an API key or credential for a service, you cannot access it. This includes:
+- Slack (no messaging access)
+- Notion (no access to Notion MCP due to OAuth)
+- Figma (no access to Figma MCP due to OAuth)
+
+For these you will need to ask for human help.
+
 ### How do I run evaluations without local infrastructure?
 
 Use the OpenHands CI system. See [eval-with-ci](../eval-with-ci/SKILL.md) skill.
@@ -385,25 +392,4 @@ See the [docker skill](https://github.com/OpenHands/extensions/tree/main/skills/
 
 The agent has Datadog access via environment variables (`DD_API_KEY`, `DD_APP_KEY`, `DD_SITE`). Linear tickets about Datadog errors or monitoring issues should be investigated directly - do NOT add them to Phase 4 as "requiring access".
 
-See the [datadog skill](https://github.com/OpenHands/extensions/tree/main/skills/datadog) for canonical instructions on:
-- Querying logs
-- Querying metrics
-- Querying APM traces
-- Listing monitors
-
-**Example**: Query recent errors:
-```bash
-curl -s -X POST "https://api.${DD_SITE}/api/v2/logs/events/search" \
-  -H "DD-API-KEY: ${DD_API_KEY}" \
-  -H "DD-APPLICATION-KEY: ${DD_APP_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "filter": {
-      "query": "status:error",
-      "from": "now-1h",
-      "to": "now"
-    },
-    "sort": "-timestamp",
-    "page": {"limit": 50}
-  }' | jq .
-```
+See the [datadog skill](https://github.com/OpenHands/extensions/tree/main/skills/datadog) for canonical instructions.
