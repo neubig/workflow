@@ -37,6 +37,7 @@ Unit/integration tests implemented and their results.
 END-TO-END demonstration that the feature/fix works in realistic conditions.
 - Command-line output, screenshots, or logs showing real behavior
 - NO mention of unit tests here - this is about live functionality
+- Include conversation link if available (see below)
 
 ## Checklist
 - [ ] Tests pass
@@ -48,6 +49,31 @@ END-TO-END demonstration that the feature/fix works in realistic conditions.
 **Key distinction:**
 - `## Testing` = Unit tests implemented and passing (code verification)
 - `## Evidence` = Live run showing feature works end-to-end (behavior verification)
+</IMPORTANT>
+
+### Adding Conversation Link to Evidence
+
+<IMPORTANT>
+**If you have a conversation ID, include a link so reviewers can verify the evidence.**
+
+Check for conversation ID:
+```bash
+ls /workspace/conversations/ 2>/dev/null | head -1
+```
+
+If a conversation ID exists, add this to the Evidence section:
+```markdown
+## Evidence
+
+**Verification link:** [View conversation](https://app.all-hands.dev/conversations/CONVERSATION_ID)
+
+[rest of evidence...]
+```
+
+This allows reviewers to:
+- See the full context of how evidence was gathered
+- Verify commands were actually run
+- Check for any issues not shown in the summary
 </IMPORTANT>
 
 ## PR Readiness Checklist
