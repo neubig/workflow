@@ -5,7 +5,7 @@
         "email": "graham@openhands.dev"
     },
     "metadata": {
-        "description": "Combined marketplace with all OpenHands public skills plus Graham's personal workflow skills",
+        "description": "Combined marketplace with all OpenHands public skills plus all repo-local workflow and integration skills",
         "version": "1.0.0",
         "pluginRoot": "../skills"
     },
@@ -25,6 +25,19 @@
             ]
         },
         {
+            "name": "eval-with-ci",
+            "source": "./eval-with-ci",
+            "description": "Run evaluations through the OpenHands/software-agent-sdk GitHub Actions CI workflow",
+            "category": "workflow",
+            "keywords": [
+                "evaluation",
+                "benchmark",
+                "swebench",
+                "github-actions",
+                "ci"
+            ]
+        },
+        {
             "name": "github-pr-workflow",
             "source": "./github-pr-workflow",
             "description": "Complete GitHub PR workflow: live testing requirements and iterative review resolution",
@@ -36,6 +49,31 @@
                 "testing",
                 "iteration",
                 "bot"
+            ]
+        },
+        {
+            "name": "sub-agent-delegation",
+            "source": "./sub-agent-delegation",
+            "description": "Delegate substantial, self-contained tasks to sub-agents for parallel execution",
+            "category": "workflow",
+            "keywords": [
+                "delegation",
+                "sub-agent",
+                "parallel",
+                "background",
+                "cloud-api"
+            ]
+        },
+        {
+            "name": "webflow",
+            "source": "./webflow",
+            "description": "Interact with Webflow sites, CMS collections, and content using the Webflow Data API v2. Manage pages, assets, and custom code programmatically.",
+            "category": "integration",
+            "keywords": [
+                "webflow",
+                "cms",
+                "website",
+                "api"
             ]
         },
         {
@@ -427,18 +465,6 @@
                 "deployment",
                 "preview",
                 "hosting"
-            ]
-        },
-        {
-            "name": "webflow",
-            "source": "./webflow",
-            "description": "Interact with Webflow sites, CMS collections, and content using the Webflow Data API v2. Manage pages, assets, and custom code programmatically.",
-            "category": "integration",
-            "keywords": [
-                "webflow",
-                "cms",
-                "website",
-                "api"
             ]
         }
     ]

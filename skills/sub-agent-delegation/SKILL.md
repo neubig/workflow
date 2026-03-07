@@ -399,18 +399,13 @@ else:
 
 ## Delegating PR Fix Tasks
 
-When delegating PR tasks, instruct sub-agents to follow the [github-pr-workflow](../github-pr-workflow/SKILL.md) skill and its PR Readiness Checklist.
+When delegating PR tasks, instruct sub-agents to follow the [github-pr-workflow](../github-pr-workflow/SKILL.md) skill and its PR Readiness Checklist rather than copying the checklist into the delegation prompt.
 
 **Example task description:**
 ```
 Fix unresolved review comments in PR #123.
 
-Follow the github-pr-workflow skill PR Readiness Checklist:
-- Gather END-TO-END evidence (not unit tests)
-- Resolve all review threads
-- Wait for CI to pass
-- Check for no extra unnecessary code
-- Only mark ready when ALL conditions pass
+Follow the github-pr-workflow skill for PR readiness, evidence gathering, review resolution, and ready-for-review criteria.
 ```
 
 ## Checking Delegation Availability

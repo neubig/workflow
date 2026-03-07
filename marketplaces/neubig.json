@@ -5,7 +5,7 @@
         "email": "graham@openhands.dev"
     },
     "metadata": {
-        "description": "Graham's personal workflow skills for managing Linear tickets, GitHub PRs, and development tasks",
+        "description": "Graham's workflow-focused skills for managing Linear tickets, GitHub PRs, delegation, and CI evaluations",
         "version": "1.0.0",
         "pluginRoot": "../skills"
     },
@@ -25,6 +25,19 @@
             ]
         },
         {
+            "name": "eval-with-ci",
+            "source": "./eval-with-ci",
+            "description": "Run evaluations through the OpenHands/software-agent-sdk GitHub Actions CI workflow",
+            "category": "workflow",
+            "keywords": [
+                "evaluation",
+                "benchmark",
+                "swebench",
+                "github-actions",
+                "ci"
+            ]
+        },
+        {
             "name": "github-pr-workflow",
             "source": "./github-pr-workflow",
             "description": "Complete GitHub PR workflow: live testing requirements and iterative review resolution",
@@ -37,23 +50,36 @@
                 "iteration",
                 "bot"
             ]
+        },
+        {
+            "name": "sub-agent-delegation",
+            "source": "./sub-agent-delegation",
+            "description": "Delegate substantial, self-contained tasks to sub-agents for parallel execution",
+            "category": "workflow",
+            "keywords": [
+                "delegation",
+                "sub-agent",
+                "parallel",
+                "background",
+                "cloud-api"
+            ]
         }
     ],
     "dependencies": {
         "general": [
             {
                 "name": "github",
-                "source": "OpenHands/extensions/skills/github",
+                "source": "OpenHands/extensions:skills/github",
                 "description": "General GitHub API skill for repository operations"
             },
             {
                 "name": "datadog",
-                "source": "OpenHands/extensions/skills/datadog",
+                "source": "OpenHands/extensions:skills/datadog",
                 "description": "Query Datadog logs, metrics, APM traces and monitors"
             },
             {
                 "name": "docker",
-                "source": "OpenHands/extensions/skills/docker",
+                "source": "OpenHands/extensions:skills/docker",
                 "description": "Run Docker commands within container environments"
             }
         ]

@@ -266,13 +266,7 @@ For these you will need to ask for human help.
 
 ### How do I run evaluations without local infrastructure?
 
-Use the OpenHands CI system. See [eval-with-ci](../eval-with-ci/SKILL.md) skill.
-
-**Quick method**: Add a label to a PR in `OpenHands/software-agent-sdk`:
-- `run-eval-1` - 1 instance (sanity check)
-- `run-eval-50` - 50 instances (standard)
-
-**Manual dispatch**: Use the [Run Eval workflow](https://github.com/OpenHands/software-agent-sdk/actions/workflows/run-eval.yml) with custom parameters.
+Use the OpenHands CI system. See [eval-with-ci](../eval-with-ci/SKILL.md) for the supported `run-eval-*` labels, workflow dispatch options, and monitoring steps.
 
 ### What if I can't test a PR locally?
 
