@@ -14,26 +14,55 @@ triggers:
 
 This skill covers the complete PR workflow: live testing to demonstrate functionality, and iterative review resolution until all comments are addressed.
 
+## PR Description Structure
+
+<IMPORTANT>
+**Every PR description MUST have these sections in this exact order:**
+
+```markdown
+## Summary
+Short summary of what the PR does and what issue it resolves.
+Closes #XXX
+
+## Details
+Design decisions, architecture choices, or context not obvious from code.
+(Can be omitted for trivial PRs like typo fixes)
+
+## Testing
+Unit/integration tests implemented and their results.
+- List of test files added/modified
+- Test run output showing all tests pass
+
+## Evidence
+END-TO-END demonstration that the feature/fix works in realistic conditions.
+- Command-line output, screenshots, or logs showing real behavior
+- NO mention of unit tests here - this is about live functionality
+
+## Checklist
+- [ ] Tests pass
+- [ ] Evidence gathered from live run
+- [ ] No unnecessary code
+- [ ] Documentation updated (if applicable)
+```
+
+**Key distinction:**
+- `## Testing` = Unit tests implemented and passing (code verification)
+- `## Evidence` = Live run showing feature works end-to-end (behavior verification)
+</IMPORTANT>
+
 ## PR Readiness Checklist
 
 <IMPORTANT>
 **A PR can ONLY be marked ready for review when ALL of the following are true:**
 
 ### Required Conditions
-- [ ] **Evidence**: PR description contains `## Evidence` section with END-TO-END proof (see Part 1)
+- [ ] **Structure**: PR description has all required sections (Summary, Details, Testing, Evidence, Checklist)
+- [ ] **Evidence**: Evidence section shows END-TO-END proof (no unit test mentions)
 - [ ] **Reviews**: All review threads are resolved (0 unresolved)
 - [ ] **CI**: All required CI checks are passing
 - [ ] **Conflicts**: No merge conflicts (mergeable=true)
 - [ ] **Code Quality**: No extra unnecessary code (see Part 3)
 - [ ] **Tests**: Only minimal tests for core functionality (see Part 3)
-
-### What Goes Where
-| Section | Content |
-|---------|---------|
-| `## Evidence` | End-to-end demonstration that the feature/fix WORKS in realistic conditions |
-| `## Testing` | Unit test results, test coverage info (NOT evidence of functionality) |
-
-**Unit tests are NOT evidence.** They verify code paths but don't prove the feature works end-to-end.
 </IMPORTANT>
 
 ## Part 1: Live Testing Requirements (Evidence)
