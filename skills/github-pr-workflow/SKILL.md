@@ -14,10 +14,34 @@ triggers:
 
 This skill covers the complete PR workflow: live testing to demonstrate functionality, and iterative review resolution until all comments are addressed.
 
-## Part 1: Live Testing Requirements
+## PR Readiness Checklist
 
 <IMPORTANT>
-Unit tests are NOT sufficient. PRs must demonstrate actual behavior in a live setting before being marked ready for review.
+**A PR can ONLY be marked ready for review when ALL of the following are true:**
+
+### Required Conditions
+- [ ] **Evidence**: PR description contains `## Evidence` section with END-TO-END proof (see Part 1)
+- [ ] **Reviews**: All review threads are resolved (0 unresolved)
+- [ ] **CI**: All required CI checks are passing
+- [ ] **Conflicts**: No merge conflicts (mergeable=true)
+- [ ] **Code Quality**: No extra unnecessary code (see Part 3)
+- [ ] **Tests**: Only minimal tests for core functionality (see Part 3)
+
+### What Goes Where
+| Section | Content |
+|---------|---------|
+| `## Evidence` | End-to-end demonstration that the feature/fix WORKS in realistic conditions |
+| `## Testing` | Unit test results, test coverage info (NOT evidence of functionality) |
+
+**Unit tests are NOT evidence.** They verify code paths but don't prove the feature works end-to-end.
+</IMPORTANT>
+
+## Part 1: Live Testing Requirements (Evidence)
+
+<IMPORTANT>
+Unit tests are NOT sufficient for the Evidence section. PRs must demonstrate actual end-to-end behavior in a live setting before being marked ready for review.
+
+The Evidence section must show the code running in realistic conditions - a user invoking the feature, a server responding to requests, a CLI command producing expected output, etc.
 </IMPORTANT>
 
 ### Bug Fix PRs
@@ -376,6 +400,60 @@ for pr_info in "Owner/Repo/123" "Owner2/Repo2/456"; do
 done
 ```
 
+## Part 3: Code Quality and Minimal Tests
+
+<IMPORTANT>
+Before marking a PR ready, review the changes for unnecessary code and excessive tests.
+</IMPORTANT>
+
+### No Extra Unnecessary Code
+
+Check that the PR does not include:
+- Dead code or commented-out code that should be removed
+- Debug statements (print, console.log, debugger) left in production code
+- Unused imports, variables, or functions
+- Over-engineered solutions when simpler approaches exist
+- Duplicated logic that could be refactored
+
+```bash
+# Quick checks for common issues
+git diff main...HEAD --name-only | xargs grep -l "console.log\|print(\|debugger\|TODO\|FIXME" 2>/dev/null
+```
+
+### Minimal Tests for Core Functionality
+
+Tests should verify core functionality, not exhaustively cover every edge case. Check that:
+
+1. **Tests are focused**: Each test verifies ONE behavior
+2. **Tests are minimal**: Only enough tests to verify the core functionality works
+3. **No redundant tests**: Multiple tests shouldn't verify the same thing
+4. **No excessive mocking**: Tests should exercise real code paths where possible
+
+**Red flags for excessive testing:**
+- More lines of test code than implementation code (for simple features)
+- Multiple tests that differ only by input values when one parameterized test would suffice
+- Tests for trivial getters/setters or obvious behavior
+- Heavy mocking that obscures what's actually being tested
+
+**Good test coverage:**
+- Happy path works
+- Key error conditions are handled
+- Critical edge cases are covered
+
+```markdown
+## Testing
+
+**Core functionality verified:**
+- ✓ Feature works with valid input
+- ✓ Returns appropriate error for invalid input
+- ✓ Handles empty/null edge case
+
+**Not tested (intentionally):**
+- Trivial variations of valid input
+- UI styling details
+- Third-party library behavior
+```
+
 ## Best Practices
 
 1. **Always iterate**: Don't assume resolving reviews means you're done
@@ -386,6 +464,7 @@ done
 6. **Reply before resolving**: Document what you did or why you declined
 7. **Batch operations**: Check all PRs at once to catch issues early
 8. **Track iterations**: Note how many cycles a PR took for process improvement
+9. **Review for bloat**: Check for unnecessary code and excessive tests before marking ready
 
 ## Waiting for CI After Pushing Fixes
 
