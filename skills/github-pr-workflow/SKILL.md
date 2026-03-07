@@ -40,9 +40,11 @@ END-TO-END demonstration that the feature/fix works in realistic conditions.
 - Include conversation link if available (see below)
 
 ## Checklist
-- [ ] Tests pass
-- [ ] Evidence gathered from live run
+- [ ] CI passing
+- [ ] Tests are minimal and pass
 - [ ] No unnecessary code
+- [ ] Evidence from live run (with conversation link if available)
+- [ ] All review comments resolved
 - [ ] Documentation updated (if applicable)
 ```
 
@@ -83,7 +85,8 @@ This allows reviewers to:
 
 ### Required Conditions
 - [ ] **Structure**: PR description has all required sections (Summary, Details, Testing, Evidence, Checklist)
-- [ ] **Evidence**: Evidence section shows END-TO-END proof (no unit test mentions)
+- [ ] **Evidence**: Evidence section shows END-TO-END proof with actual command output/screenshots (no unit test mentions)
+- [ ] **Conversation Link**: If conversation ID exists, Evidence includes verification link
 - [ ] **Reviews**: All review threads are resolved (0 unresolved)
 - [ ] **CI**: All required CI checks are passing
 - [ ] **Conflicts**: No merge conflicts (mergeable=true)
