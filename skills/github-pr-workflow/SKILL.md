@@ -35,9 +35,10 @@ Unit/integration tests implemented and their results.
 
 ## Evidence
 END-TO-END demonstration that the feature/fix works in realistic conditions.
-- Command-line output, screenshots, or logs showing real behavior
-- NO mention of unit tests here - this is about live functionality
-- Include conversation link if available (see below)
+- Include concrete proof from a live run: either a screenshot link/image or fenced command-line input+output from the actual run
+- Link to the OpenHands conversation when available so reviewers can verify the commands/screenshots
+- NO mention of unit tests here - this is about live functionality, not test results
+- If live evidence cannot be gathered, say so explicitly in `## Evidence`, explain what blocked it, and keep the PR in draft
 
 ## Checklist
 - [ ] CI passing
@@ -85,13 +86,14 @@ This allows reviewers to:
 
 ### Required Conditions
 - [ ] **Structure**: PR description has all required sections (Summary, Details, Testing, Evidence, Checklist)
-- [ ] **Evidence**: Evidence section shows END-TO-END proof with actual command output/screenshots (no unit test mentions)
+- [ ] **Evidence**: Evidence section shows END-TO-END proof with an actual screenshot or fenced command-line input/output from a live run (no unit test mentions)
 - [ ] **Conversation Link**: If conversation ID exists, Evidence includes verification link
 - [ ] **Reviews**: All review threads are resolved (0 unresolved)
 - [ ] **CI**: All required CI checks are passing
 - [ ] **Conflicts**: No merge conflicts (mergeable=true)
 - [ ] **Code Quality**: No extra unnecessary code (see Part 3)
 - [ ] **Tests**: Only minimal tests for core functionality (see Part 3)
+- [ ] **Blocked Evidence**: If live evidence cannot be gathered, the PR stays in draft and the Evidence section explains the blocker plus manual verification steps
 </IMPORTANT>
 
 ## Part 1: Live Testing Requirements (Evidence)
@@ -174,12 +176,17 @@ Only add to action items if you genuinely cannot gather evidence after trying.
 
 ### When Evidence Truly Cannot Be Gathered
 
-Keep in **draft** and add to PR description explaining what you tried:
+Keep the PR in **draft**. Do **not** mark it ready for review based only on unit tests, CI, or a descriptive summary.
+
+Update the PR description with an honest `## Evidence` section explaining what you tried:
 
 ```markdown
 ## Evidence
 
+**Verification link:** [View conversation](https://app.all-hands.dev/conversations/CONVERSATION_ID)
+
 **Cannot be tested in current environment:**
+- What I tried: Ran `python -c "from openhands.tools import terminal"` on Linux
 - Resource needed: Windows machine
 - Reason: Fix is for Windows-specific `fcntl` import error
 - Manual verification steps:

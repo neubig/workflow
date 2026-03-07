@@ -170,7 +170,7 @@ For multiple draft PRs, delegate to sub-agents. See [sub-agent-delegation](../su
 
 ### When to Add to Phase 4
 
-PRs remain in DRAFT if evidence cannot be gathered due to missing credentials, platform requirements, or external service access. Add "## Evidence" section explaining what's needed.
+PRs remain in DRAFT if live evidence cannot be gathered due to missing credentials, platform requirements, or external service access. Do not move them to ready-for-review based only on CI, unit tests, or a written summary. Add an `## Evidence` section that says what you tried, what blocked live verification, and the exact manual verification steps a human should run.
 
 ## Phase 4: Complete Status Summary
 
