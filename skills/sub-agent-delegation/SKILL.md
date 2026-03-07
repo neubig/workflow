@@ -399,30 +399,19 @@ else:
 
 ## Delegating PR Fix Tasks
 
-<IMPORTANT>
-When delegating PR fix tasks to sub-agents, always include these requirements in the task description:
+When delegating PR tasks, instruct sub-agents to follow the [github-pr-workflow](../github-pr-workflow/SKILL.md) skill and its PR Readiness Checklist.
 
-1. **CI must pass before marking ready**: The sub-agent must wait for CI to complete and verify all checks pass before marking the PR ready for review
-2. **All review comments must be resolved**: Every unresolved review thread must be addressed and resolved
-3. **No merge conflicts**: If the PR has conflicts, they must be resolved first
-4. **Keep in draft if any condition fails**: If CI fails, reviews remain unresolved, or conflicts exist, the PR must stay in draft
-
-**Example task description for PR fixes:**
+**Example task description:**
 ```
 Fix unresolved review comments in PR #123.
 
-After fixing:
-1. Push your changes
-2. Wait for CI to complete
-3. Verify ALL CI checks pass (do not mark ready if any check fails)
-4. Resolve all review threads
-5. Only mark PR ready for review if:
-   - All CI checks pass
-   - All review threads are resolved
-   - No merge conflicts exist
-6. If any condition fails, keep the PR in draft status
+Follow the github-pr-workflow skill PR Readiness Checklist:
+- Gather END-TO-END evidence (not unit tests)
+- Resolve all review threads
+- Wait for CI to pass
+- Check for no extra unnecessary code
+- Only mark ready when ALL conditions pass
 ```
-</IMPORTANT>
 
 ## Checking Delegation Availability
 
