@@ -94,6 +94,8 @@ This allows reviewers to:
 - [ ] **Code Quality**: No extra unnecessary code (see Part 3)
 - [ ] **Tests**: Only minimal tests for core functionality (see Part 3)
 - [ ] **Blocked Evidence**: If live evidence cannot be gathered, the PR stays in draft and the Evidence section explains the blocker plus manual verification steps
+
+**Hard rule:** An `## Evidence` heading by itself is **not** enough. If the section does not show a live run, or it says testing/evidence is blocked, the PR **must remain draft** and **must not** be marked ready for review.
 </IMPORTANT>
 
 ## Part 1: Live Testing Requirements (Evidence)
@@ -234,21 +236,22 @@ This ensures users won't follow broken instructions.
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  1. Check PR readiness requirements:                         │
-│     a. Evidence in PR description? (see Part 1)              │
-│     b. Unresolved review comments == 0?                      │
-│     c. CI checks passing?                                    │
-│     d. No merge conflicts?                                   │
+│     a. Evidence shows a live run (not just a heading)?       │
+│     b. Evidence does not say testing is blocked?             │
+│     c. Unresolved review comments == 0?                      │
+│     d. CI checks passing?                                    │
+│     e. No merge conflicts?                                   │
 │     ↓                                                       │
 │  2. If ANY requirement fails:                                │
 │     a. Move PR to draft (if ready)                          │
-│     b. Add/update Evidence section if missing                │
+│     b. Add/update Evidence section with live proof           │
 │     c. Address each unresolved review comment                │
 │     d. Fix CI failures                                       │
 │     e. Resolve merge conflicts (rebase or merge from base)   │
 │     f. Push fixes                                           │
 │     g. Reply to and resolve review threads                  │
 │     h. Wait for CI to complete                              │
-│     i. Mark PR ready                                        │
+│     i. Mark PR ready only if step 1 now passes              │
 │     j. GOTO step 1 (bot may review new code!)               │
 │     ↓                                                       │
 │  3. If ALL requirements pass:                                │
@@ -258,12 +261,13 @@ This ensures users won't follow broken instructions.
 
 <IMPORTANT>
 A PR must be in DRAFT status unless ALL conditions are met:
-1. **Evidence exists**: PR description contains an `## Evidence` section with concrete proof the changes work (before/after for bugs, working demo for features), OR it's a content-only PR
-2. **No unresolved reviews**: All review threads are resolved
-3. **CI passes**: All required CI checks are passing
-4. **No merge conflicts**: The PR can be cleanly merged into the base branch
+1. **Live evidence exists**: PR description contains an `## Evidence` section with concrete proof from a real run that the changes work (before/after for bugs, working demo for features), OR it's a content-only PR
+2. **Evidence is not blocked**: If `## Evidence` says testing/evidence is blocked, unavailable, or still needs manual verification, the PR stays draft
+3. **No unresolved reviews**: All review threads are resolved
+4. **CI passes**: All required CI checks are passing
+5. **No merge conflicts**: The PR can be cleanly merged into the base branch
 
-If ANY condition fails, the PR MUST remain in or be moved to draft status.
+If ANY condition fails, the PR MUST remain in or be moved to draft status. A present-but-non-live `## Evidence` section does not satisfy readiness.
 </IMPORTANT>
 
 <IMPORTANT>
@@ -317,7 +321,9 @@ gh api graphql -f query='
 
 Move a PR to draft when:
 - Unresolved review comments exist, OR
-- Evidence section is missing or incomplete (for non-content PRs)
+- Evidence section is missing, OR
+- Evidence section exists but does not show a live run, OR
+- Evidence section says testing/evidence is blocked or still requires manual verification (for non-content PRs)
 ```bash
 # First get the PR node ID
 PR_ID=$(gh api repos/OWNER/REPO/pulls/PR_NUMBER --jq '.node_id')
@@ -410,10 +416,13 @@ After resolving merge conflicts, CI will re-run. Always wait for CI to complete 
 ## Mark PR Ready for Review
 
 Only mark ready when ALL conditions are satisfied:
-1. Evidence section exists in PR description (or it's a content-only PR)
-2. All review threads are resolved
-3. All required CI checks are passing
-4. No merge conflicts exist
+1. `## Evidence` contains concrete proof from a real live run (or it's a content-only PR)
+2. `## Evidence` does not say testing/evidence is blocked, unavailable, or pending manual verification
+3. All review threads are resolved
+4. All required CI checks are passing
+5. No merge conflicts exist
+
+If `## Evidence` is present but only summarizes changes, mentions tests, or says testing is blocked, the PR is **not ready**.
 
 ```bash
 PR_ID=$(gh api repos/OWNER/REPO/pulls/PR_NUMBER --jq '.node_id')
