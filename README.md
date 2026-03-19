@@ -10,6 +10,7 @@ This repository contains OpenHands skills for managing daily development workflo
 | [eval-with-ci](./skills/eval-with-ci/SKILL.md) | Run SDK evaluations through the GitHub Actions-based CI workflow | `run eval`, `evaluation`, `benchmark`, `swebench` |
 | [github-pr-workflow](./skills/github-pr-workflow/SKILL.md) | Complete PR workflow with live testing and iterative review resolution | `pr review`, `bot review`, `review iteration`, `live test` |
 | [sub-agent-delegation](./skills/sub-agent-delegation/SKILL.md) | Delegate substantial tasks to sub-agents via DelegateTool or Cloud API | `delegate task`, `sub-agent`, `spawn agent`, `parallel task` |
+| [openhands-slides](./skills/openhands-slides/SKILL.md) | Create branded reveal.js slide presentations with OpenHands styling and PDF export | `create slides`, `presentation`, `slide deck`, `slides` |
 | [webflow](./skills/webflow/SKILL.md) | Interact with Webflow sites, CMS collections, pages, assets, and custom code | `webflow`, `webflow api`, `webflow cms`, `webflow site` |
 
 ## Marketplaces
