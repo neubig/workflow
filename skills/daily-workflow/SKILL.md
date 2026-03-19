@@ -105,18 +105,21 @@ curl -s -X POST https://api.linear.app/graphql \
 ### For Each Ticket: TAKE ACTION
 
 <IMPORTANT>
-**ALWAYS attempt to work on every ticket. Never skip with "can investigate if desired".**
+**ALWAYS attempt to work on every ticket unless it is explicitly blocked or already being handled through linked GitHub work. Never skip with "can investigate if desired".**
 
 For each ticket:
 1. Read the description fully
-2. If it references code/repos, clone and investigate
-3. If it's a bug, attempt to reproduce and fix it
-4. If it's a feature, attempt to implement it
-5. Only add to Phase 4 if you genuinely cannot proceed after trying
+2. If it is blocked by another active issue or labeled `Blocked`, do not treat it as actionable
+3. If it links to an active GitHub issue/PR, treat GitHub as the source of truth and include the direct link instead of duplicating separate Linear-only work
+4. If it references code/repos and is not already tracked on GitHub, clone and investigate
+5. If it's a bug, attempt to reproduce and fix it
+6. If it's a feature, attempt to implement it
+7. Only add to Phase 4 if you genuinely cannot proceed after trying
 </IMPORTANT>
 
 **Actionable (DO THE WORK):**
-- Bug fixes with GitHub links → Clone repo, investigate, fix bug, open/update PR
+- Bug fixes with GitHub links but no active PR yet → Clone repo, investigate, fix bug, open/update PR
+- Linear issues linked to an active GitHub PR → Continue the work through that PR and surface the direct PR link in the summary
 - DataDog/monitoring errors → Investigate the codebase, find root cause, fix it
 - Feature requests with clear specs → Implement the feature
 - Investigation tasks → Actually investigate and report findings with conclusions
@@ -125,6 +128,10 @@ For each ticket:
 **Delegate to Sub-Agent:**
 - If the ticket requires substantial work (>5 minutes), delegate it
 - See [sub-agent-delegation](../sub-agent-delegation/SKILL.md)
+
+**Exclude from actionable work:**
+- Tickets blocked by another active issue
+- Tickets labeled `Blocked`
 
 **Add to Phase 4 ONLY if truly manual (after attempting work):**
 - Tickets with only Slack links (no repo/code context)
@@ -137,6 +144,10 @@ For each ticket:
 **Use the [github-pr-workflow](../github-pr-workflow/SKILL.md) skill for all PR operations.**
 
 For each ready PR, check the PR Readiness Checklist. If ANY condition fails, move to draft and process in Phase 3.
+
+<IMPORTANT>
+A PR is **not** ready just because CI passes or because the body contains `## Testing` / `## Evidence` headings. For non-content PRs, the `## Evidence` section must contain concrete proof from a real live run (for example, a screenshot or fenced command input/output). An empty heading, a prose summary, or an evidence section that says verification is blocked/manual does **not** satisfy readiness.
+</IMPORTANT>
 
 ### Stale PR Detection
 
@@ -170,7 +181,7 @@ For multiple draft PRs, delegate to sub-agents. See [sub-agent-delegation](../su
 
 ### When to Add to Phase 4
 
-PRs remain in DRAFT if live evidence cannot be gathered due to missing credentials, platform requirements, or external service access. Do not move them to ready-for-review based only on CI, unit tests, or a written summary. Add an `## Evidence` section that says what you tried, what blocked live verification, and the exact manual verification steps a human should run.
+PRs remain in DRAFT if live evidence cannot be gathered due to missing credentials, platform requirements, or external service access. Do not move them to ready-for-review based only on CI, unit tests, a `## Testing` section, or a written summary. Add an `## Evidence` section that says what you tried, what blocked live verification, and the exact manual verification steps a human should run.
 
 ## Phase 4: Complete Status Summary
 

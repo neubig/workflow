@@ -1,0 +1,64 @@
+import importlib.util
+import pathlib
+import unittest
+
+
+MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "daily-workflow-fetch.py"
+SPEC = importlib.util.spec_from_file_location("daily_workflow_fetch", MODULE_PATH)
+MODULE = importlib.util.module_from_spec(SPEC)
+assert SPEC and SPEC.loader
+SPEC.loader.exec_module(MODULE)
+
+
+class EvidenceParsingTests(unittest.TestCase):
+    def test_extract_markdown_section_returns_evidence_content(self):
+        body = """## Summary\nSummary text\n\n## Evidence\n```bash\n$ python app.py\noutput: success\n```\n\n## Checklist\n- [x] Done\n"""
+        self.assertEqual(
+            MODULE.extract_markdown_section(body, "Evidence"),
+            "```bash\n$ python app.py\noutput: success\n```",
+        )
+
+    def test_evidence_section_accepts_screenshot(self):
+        evidence = "Validated in the browser. ![Screenshot](https://example.com/run.png)"
+        self.assertTrue(MODULE.evidence_section_has_live_run(evidence))
+
+    def test_evidence_section_accepts_fenced_command_output(self):
+        evidence = """```bash\n$ python app.py\noutput: success\n```"""
+        self.assertTrue(MODULE.evidence_section_has_live_run(evidence))
+
+    def test_evidence_section_rejects_blocked_manual_verification(self):
+        evidence = "Live verification is blocked pending credentials and still requires manual verification."
+        self.assertFalse(MODULE.evidence_section_has_live_run(evidence))
+
+    def test_evidence_section_rejects_plain_summary_without_live_run(self):
+        evidence = "Ran through the changes conceptually and described the expected behavior."
+        self.assertFalse(MODULE.evidence_section_has_live_run(evidence))
+
+
+class LinearTicketActionTests(unittest.TestCase):
+    def test_ticket_with_linked_pull_request_points_to_github(self):
+        ticket = MODULE.LinearTicket(
+            identifier="ALL-1",
+            title="Example",
+            description="Tracked on GitHub",
+            priority=2,
+            priority_label="High",
+            state="In Progress",
+            state_type="started",
+            url="https://linear.app/example/issue/ALL-1",
+            external_links=[
+                MODULE.ExternalLink(
+                    title="PR: Example implementation",
+                    url="https://github.com/OpenHands/example/pull/123",
+                )
+            ],
+        )
+
+        instructions = ticket.get_action_instructions()
+        self.assertIn("Continue through linked GitHub PR(s) already in progress", instructions)
+        self.assertIn("https://github.com/OpenHands/example/pull/123", instructions)
+        self.assertNotIn("git clone", instructions)
+
+
+if __name__ == "__main__":
+    unittest.main()
