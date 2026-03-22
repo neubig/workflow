@@ -26,6 +26,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+@dataclass(frozen=True)
+class ExternalLink:
+    title: str
+    url: str
+
+
 @dataclass
 class LinearTicket:
     identifier: str
@@ -37,6 +43,7 @@ class LinearTicket:
     state_type: str
     url: str
     labels: list[str] = field(default_factory=list)
+    external_links: list[ExternalLink] = field(default_factory=list)
 
     @property
     def is_actionable(self) -> bool:
@@ -53,6 +60,18 @@ class LinearTicket:
             if not repo.startswith(('http', 'www')):
                 repos.append(repo)
         return list(set(repos))
+
+    @property
+    def github_links(self) -> list[ExternalLink]:
+        return [link for link in self.external_links if "github.com/" in link.url]
+
+    @property
+    def linked_pull_requests(self) -> list[ExternalLink]:
+        return [link for link in self.github_links if "/pull/" in link.url]
+
+    @property
+    def linked_issues(self) -> list[ExternalLink]:
+        return [link for link in self.github_links if "/issues/" in link.url]
 
     @property
     def is_bug(self) -> bool:
@@ -78,6 +97,29 @@ class LinearTicket:
             lines.append("**Status**: Add to summary as manual action item")
             return "\n".join(lines)
 
+        if self.linked_pull_requests:
+            lines.append("**Action**: Continue through linked GitHub PR(s) already in progress")
+            lines.append("**Linked GitHub PRs**:")
+            for link in self.linked_pull_requests:
+                title = link.title or link.url.rsplit('/', 1)[-1]
+                lines.append(f"- [{title}]({link.url})")
+            if self.linked_issues:
+                lines.append("**Linked GitHub issues**:")
+                for link in self.linked_issues:
+                    title = link.title or link.url.rsplit('/', 1)[-1]
+                    lines.append(f"- [{title}]({link.url})")
+            lines.append("**Status**: Follow the linked PR workflow; no separate Linear-only action needed")
+            return "\n".join(lines)
+
+        if self.linked_issues:
+            lines.append("**Action**: Follow linked GitHub work already in progress")
+            lines.append("**Linked GitHub items**:")
+            for link in self.linked_issues:
+                title = link.title or link.url.rsplit('/', 1)[-1]
+                lines.append(f"- [{title}]({link.url})")
+            lines.append("**Status**: Track implementation through the linked GitHub issue/PR rather than duplicating work in Linear")
+            return "\n".join(lines)
+
         repos = self.referenced_repos
         if repos:
             lines.append(f"**Action**: Investigate and fix in {', '.join(repos)}")
@@ -96,7 +138,7 @@ class LinearTicket:
             lines.append("```")
         else:
             lines.append("**Action**: Investigate ticket description for actionable items")
-            lines.append("**Note**: No GitHub repos detected - read description carefully")
+            lines.append("**Note**: No GitHub repos or PR links detected - read description carefully")
 
         return "\n".join(lines)
 
@@ -191,14 +233,15 @@ class GitHubPR:
                     lines.append(f"- {detail}")
 
         elif self.needs_evidence:
-            lines.append("**Action**: Gather evidence by testing the PR")
+            lines.append("**Action**: Gather live evidence by testing the PR")
             lines.append("**Commands**:")
             lines.append("```bash")
             lines.append(f"cd /tmp && git clone https://github.com/{self.repo}.git {repo_short}")
             lines.append(f"cd /tmp/{repo_short} && git fetch origin {self.head_branch} && git checkout {self.head_branch}")
-            lines.append("# Run tests or demo the feature")
-            lines.append("# Add ## Evidence section to PR description")
-            lines.append("# Then mark ready for review")
+            lines.append("# Run or demo the feature end-to-end")
+            lines.append("# Add/update ## Evidence with a screenshot or fenced command input/output")
+            lines.append("# A ## Testing section or an empty ## Evidence heading is not enough")
+            lines.append("# If live evidence is blocked, keep the PR in draft")
             lines.append("```")
 
         elif self.can_mark_ready:
@@ -312,6 +355,10 @@ class WorkflowChecklist:
                         "is_actionable": t.is_actionable,
                         "is_manual_only": t.is_manual_only,
                         "referenced_repos": t.referenced_repos,
+                        "external_links": [
+                            {"title": link.title, "url": link.url}
+                            for link in t.external_links
+                        ],
                         "action_instructions": t.get_action_instructions(),
                     }
                     for t in self.linear_tickets
@@ -401,6 +448,12 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
                         url
                         state {{ name type }}
                         labels {{ nodes {{ name }} }}
+                        attachments {{
+                            nodes {{
+                                title
+                                url
+                            }}
+                        }}
                         inverseRelations {{
                             nodes {{
                                 type
@@ -450,6 +503,20 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
                 continue
 
             labels = [l["name"] for l in node.get("labels", {}).get("nodes", [])]
+            normalized_labels = {label.strip().lower() for label in labels}
+            if "blocked" in normalized_labels:
+                continue
+
+            attachments = node.get("attachments", {}).get("nodes", [])
+            external_links = [
+                ExternalLink(
+                    title=(attachment.get("title") or "").strip(),
+                    url=attachment.get("url", ""),
+                )
+                for attachment in attachments
+                if attachment and attachment.get("url")
+            ]
+
             all_tickets.append(
                 LinearTicket(
                     identifier=node["identifier"],
@@ -461,6 +528,7 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
                     state_type=node["state"]["type"],
                     url=node["url"],
                     labels=labels,
+                    external_links=external_links,
                 )
             )
 
@@ -475,6 +543,48 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
         return (t.priority if t.priority > 0 else 99, t.identifier)
 
     return sorted(tickets, key=priority_sort_key)
+
+
+def extract_markdown_section(body: str, heading: str) -> str:
+    """Extract the content of a markdown H2 section."""
+    pattern = rf'^##\s+{re.escape(heading)}\s*\n(.*?)(?=^##\s+|\Z)'
+    match = re.search(pattern, body, re.MULTILINE | re.DOTALL)
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+
+def evidence_section_has_live_run(evidence: str) -> bool:
+    """Return True only when Evidence shows a real live run."""
+    if not evidence.strip():
+        return False
+
+    lowered = evidence.lower()
+    blocked_indicators = (
+        "blocked",
+        "unavailable",
+        "manual verification",
+        "manual qa",
+        "pending manual",
+        "requires manual verification",
+        "still requires manual verification",
+        "could not",
+        "unable to",
+        "not run",
+        "not tested",
+    )
+    if any(indicator in lowered for indicator in blocked_indicators):
+        return False
+
+    has_screenshot = "![" in evidence or "<img" in lowered
+    has_prompt = bool(re.search(r'^\s*(\$|>)\s+\S', evidence, re.MULTILINE))
+    has_code_block = "```" in evidence
+    has_output_indicators = any(
+        indicator in lowered
+        for indicator in ("output:", "result:", "✓", "✅", "passed", "success")
+    )
+    has_command_output = has_prompt or (has_code_block and has_output_indicators)
+    return has_screenshot or has_command_output
 
 
 def _build_pr_graphql_fragment(alias: str, owner: str, repo: str, number: int) -> str:
@@ -556,8 +666,10 @@ def _parse_pr_from_graphql(repo_name: str, pr_data: dict[str, Any]) -> GitHubPR 
     reviews = pr.get("reviews", {}).get("nodes", [])
     has_approvals = any(r and r.get("state") == "APPROVED" for r in reviews)
 
-    # Check for evidence
-    has_evidence = "## Evidence" in pr_body or "## Testing" in pr_body
+    # Check for live evidence in the dedicated ## Evidence section.
+    # A ## Testing section or an empty heading is not enough.
+    evidence_section = extract_markdown_section(pr_body, "Evidence")
+    has_evidence = evidence_section_has_live_run(evidence_section)
 
     # Parse ready_for_review date
     ready_at = None
