@@ -13,7 +13,20 @@ This skill implements Graham's specific daily workflow for managing development 
 
 ## Quick Start
 
-Run the fetch script to generate a structured checklist:
+Prefer MCP tools for Linear when they are available in the current environment. The fetch script remains useful for GitHub PR triage and as a fallback when Linear MCP is unavailable.
+
+### Option A: Linear MCP available (preferred)
+
+- Use Linear MCP tools such as `list_issues` / `get_issue` for Linear ticket triage
+- Use the fetch script for GitHub PRs:
+
+```bash
+GITHUB_TOKEN="$GITHUB_TOKEN" python workflow/scripts/daily-workflow-fetch.py --github-user neubig --skip-linear
+```
+
+### Option B: No Linear MCP available
+
+Run the full fetch script to generate a structured checklist:
 
 ```bash
 LINEAR_API_KEY="$LINEAR_API_KEY" GITHUB_TOKEN="$GITHUB_TOKEN" python workflow/scripts/daily-workflow-fetch.py --github-user neubig
@@ -83,6 +96,14 @@ The only items in Phase 4 should be things the agent literally cannot do:
 ## Phase 1: Linear Tickets
 
 ### Fetch My Assigned Tickets
+
+If Linear MCP tools are available, prefer them over raw API calls.
+
+**Preferred (MCP):**
+- Use `list_issues` with `assignee="me"` to enumerate your assigned issues
+- Use `get_issue` to read the full body, attachments, and linked GitHub context for a specific ticket
+
+**Fallback (API key / curl):**
 
 ```bash
 curl -s -X POST https://api.linear.app/graphql \
