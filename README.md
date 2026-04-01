@@ -8,6 +8,7 @@ This repository contains OpenHands skills for managing daily development workflo
 |-------|-------------|----------|
 | [daily-workflow](./skills/daily-workflow/SKILL.md) | Graham's daily workflow for Linear tickets and GitHub PRs | `daily workflow`, `my workflow`, `graham workflow` |
 | [eval-with-ci](./skills/eval-with-ci/SKILL.md) | Run SDK evaluations through the GitHub Actions-based CI workflow | `run eval`, `evaluation`, `benchmark`, `swebench` |
+| [giant-eagle](./skills/giant-eagle/SKILL.md) | Find Giant Eagle grocery products and recipe ingredient substitutions using site links and the product search API | `giant eagle`, `grocery ingredients`, `buy ingredients`, `recipe shopping` |
 | [github-pr-workflow](./skills/github-pr-workflow/SKILL.md) | Complete PR workflow with live testing and iterative review resolution | `pr review`, `bot review`, `review iteration`, `live test` |
 | [sub-agent-delegation](./skills/sub-agent-delegation/SKILL.md) | Delegate substantial tasks to sub-agents via DelegateTool or Cloud API | `delegate task`, `sub-agent`, `spawn agent`, `parallel task` |
 | [openhands-slides](./skills/openhands-slides/SKILL.md) | Create branded reveal.js slide presentations with OpenHands styling and PDF export | `create slides`, `presentation`, `slide deck`, `slides` |

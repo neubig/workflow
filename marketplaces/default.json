@@ -65,6 +65,19 @@
             ]
         },
         {
+            "name": "giant-eagle",
+            "source": "./giant-eagle",
+            "description": "Find Giant Eagle grocery products and recipe ingredient substitutions using site links and the product search API.",
+            "category": "integration",
+            "keywords": [
+                "grocery",
+                "recipe",
+                "ingredients",
+                "giant-eagle",
+                "shopping"
+            ]
+        },
+        {
             "name": "webflow",
             "source": "./webflow",
             "description": "Interact with Webflow sites, CMS collections, and content using the Webflow Data API v2. Manage pages, assets, and custom code programmatically.",

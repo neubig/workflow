@@ -8,3 +8,4 @@
 - `scripts/daily-workflow-fetch.py` should treat Linear tickets with active GitHub issue/PR links as tracked on GitHub (show direct links instead of duplicating separate Linear-only action).
 - `scripts/daily-workflow-fetch.py` should exclude Linear tickets that are blocked by another active issue or labeled `Blocked`.
 - Linear MCP tools are available in this environment and should be preferred over raw Linear API key shell calls when the workflow only needs Linear reads/writes that MCP can perform.
+- Giant Eagle product search can be automated via `https://core.shop.gianteagle.com/api/v2` using the `GetProducts` GraphQL query and `storeCode: "VIRTUAL"`; direct product links use `/grocery/search/product/{sku}`.
