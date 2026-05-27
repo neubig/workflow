@@ -38,20 +38,6 @@
             ]
         },
         {
-            "name": "github-pr-workflow",
-            "source": "./github-pr-workflow",
-            "description": "Complete GitHub PR workflow: live testing requirements and iterative review resolution",
-            "category": "workflow",
-            "keywords": [
-                "github",
-                "pr",
-                "review",
-                "testing",
-                "iteration",
-                "bot"
-            ]
-        },
-        {
             "name": "sub-agent-delegation",
             "source": "./sub-agent-delegation",
             "description": "Delegate substantial, self-contained tasks to sub-agents for parallel execution",
@@ -194,6 +180,20 @@
                 "typescript",
                 "javascript",
                 "runtime"
+            ]
+        },
+        {
+            "name": "iterate",
+            "source": "OpenHands/extensions:skills/iterate",
+            "description": "Iterate on a GitHub pull request through CI, code review, and QA until merge-ready.",
+            "category": "workflow",
+            "keywords": [
+                "github",
+                "pull-request",
+                "ci",
+                "review",
+                "qa",
+                "iterate"
             ]
         },
         {

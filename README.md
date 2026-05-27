@@ -9,7 +9,6 @@ This repository contains OpenHands skills for managing daily development workflo
 | [daily-workflow](./skills/daily-workflow/SKILL.md) | Graham's daily workflow for Linear tickets and GitHub PRs | `daily workflow`, `my workflow`, `graham workflow` |
 | [eval-with-ci](./skills/eval-with-ci/SKILL.md) | Run SDK evaluations through the GitHub Actions-based CI workflow | `run eval`, `evaluation`, `benchmark`, `swebench` |
 | [giant-eagle](./skills/giant-eagle/SKILL.md) | Find Giant Eagle grocery products and recipe ingredient substitutions using site links and the product search API | `giant eagle`, `grocery ingredients`, `buy ingredients`, `recipe shopping` |
-| [github-pr-workflow](./skills/github-pr-workflow/SKILL.md) | Complete PR workflow with live testing and iterative review resolution | `pr review`, `bot review`, `review iteration`, `live test` |
 | [sub-agent-delegation](./skills/sub-agent-delegation/SKILL.md) | Delegate substantial tasks to sub-agents via DelegateTool or Cloud API | `delegate task`, `sub-agent`, `spawn agent`, `parallel task` |
 | [openhands-slides](./skills/openhands-slides/SKILL.md) | Create branded reveal.js slide presentations with OpenHands styling and PDF export | `create slides`, `presentation`, `slide deck`, `slides` |
 | [webflow](./skills/webflow/SKILL.md) | Interact with Webflow sites, CMS collections, pages, assets, and custom code | `webflow`, `webflow api`, `webflow cms`, `webflow site` |
@@ -21,7 +20,7 @@ Custom marketplace configurations for skill discovery:
 | Marketplace | Description |
 |-------------|-------------|
 | [default.json](./marketplaces/default.json) | Combined marketplace with all OpenHands public skills and all repo-local skills |
-| [neubig.json](./marketplaces/neubig.json) | Graham's workflow-focused local skills: daily workflow, PR handling, delegation, and CI evals |
+| [neubig.json](./marketplaces/neubig.json) | Graham's workflow-focused local skills: daily workflow, delegation, and CI evals, with PR iteration delegated to OpenHands/extensions `iterate` |
 
 ## Usage
 
@@ -29,9 +28,9 @@ To use these skills, configure your OpenHands `marketplace_path` to point to thi
 
 ## Prerequisites
 
-Depending on which skills you use, you may need the following environment variables:
-- `LINEAR_API_KEY` - Linear API access for `daily-workflow`
-- `GITHUB_TOKEN` - GitHub API, CLI, and workflow access for `daily-workflow`, `github-pr-workflow`, and `eval-with-ci`
+Depending on which skills you use, you may need the following environment variables and tool access:
+- Linear MCP tools - Linear ticket access for `daily-workflow`
+- `GITHUB_TOKEN` - GitHub API, CLI, and workflow access for `daily-workflow`, external `iterate`, and `eval-with-ci`
 - `OPENHANDS_CLOUD_API_KEY` - OpenHands Cloud API access for the remote delegation path in `sub-agent-delegation`
 - `WEBFLOW_API_KEY` - Webflow Data API access for `webflow`
 

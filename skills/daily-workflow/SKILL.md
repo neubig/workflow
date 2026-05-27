@@ -9,213 +9,57 @@ triggers:
 
 # Graham's Daily Workflow
 
-This skill implements Graham's specific daily workflow for managing development tasks.
+Use this skill to execute Graham's daily work, not merely plan or report on it. It gathers assigned Linear tickets and GitHub PRs, prioritizes them, does agent-actionable work directly, delegates larger independent tasks, and reserves the final action list for true human blockers.
 
-## Quick Start
+## Start Here
 
-Prefer MCP tools for Linear when they are available in the current environment. The fetch script remains useful for GitHub PR triage and as a fallback when Linear MCP is unavailable.
-
-### Option A: Linear MCP available (preferred)
-
-- Use Linear MCP tools such as `list_issues` / `get_issue` for Linear ticket triage
-- Use the fetch script for GitHub PRs:
+Begin by building a complete picture of the work queue. Linear is the source for assigned tickets and priorities; GitHub is the source for PR status, reviews, CI, and evidence. Use Linear MCP tools for ticket triage, then use the fetch script for GitHub PR triage only:
 
 ```bash
 GITHUB_TOKEN="$GITHUB_TOKEN" python workflow/scripts/daily-workflow-fetch.py --github-user neubig --skip-linear
 ```
 
-### Option B: No Linear MCP available
+Pass `GITHUB_TOKEN` explicitly so secret injection works. The script output groups ready PRs with staleness based on ready-for-review time and draft PRs by action: 🔴 fix CI, 🟡 gather evidence, 🟢 mark ready.
 
-Run the full fetch script to generate a structured checklist:
+Before acting, read:
+- [sub-agent-delegation](../sub-agent-delegation/SKILL.md): delegate self-contained work >5 minutes.
+- [iterate](https://github.com/OpenHands/extensions/tree/main/skills/iterate): drive GitHub PRs through CI, review, and QA until merge-ready.
 
-```bash
-LINEAR_API_KEY="$LINEAR_API_KEY" GITHUB_TOKEN="$GITHUB_TOKEN" python workflow/scripts/daily-workflow-fetch.py --github-user neubig
-```
+## Core Rules
 
-> **Note**: The environment variables must be explicitly passed in the command to ensure they are properly injected from the secrets system.
-
-This outputs a markdown checklist with:
-- Linear tickets grouped by priority
-- Ready PRs with staleness indicators (based on ready_for_review date, not creation date)
-- Draft PRs grouped by action needed (🔴 fix CI, 🟡 gather evidence, 🟢 mark ready)
-
-Then work through the checklist, taking action on each item.
-
-## User Identifiers
-
-- **Linear**: `graham@openhands.dev`
-- **GitHub**: `neubig`
-
-## Workflow Overview
-
-The daily workflow consists of five phases executed in order:
-
-```
-0. PREPARATION        →  Read background skills before starting work
-       ↓
-1. LINEAR TICKETS     →  ACTUALLY WORK on highest priority first
-       ↓
-2. READY PRs          →  Check for reviews, move to draft if unresolved
-       ↓  
-3. DRAFT PRs          →  ACTUALLY FIX review feedback (don't just list it)
-       ↓
-4. ACTION ITEMS       →  ONLY items that truly require human help
-```
-
-## Phase 0: Preparation (Read First!)
-
-<IMPORTANT>
-**Before starting any work, read these background skills to understand the tools and processes:**
-
-1. **[sub-agent-delegation](../sub-agent-delegation/SKILL.md)** - Learn how to parallelize work by delegating tasks to sub-agents. Essential for handling multiple PRs or tickets efficiently.
-
-2. **[github-pr-workflow](../github-pr-workflow/SKILL.md)** - Complete PR handling instructions including:
-   - Live testing requirements and evidence gathering
-   - Review iteration loop (check → fix → resolve → repeat)
-   - GraphQL commands for resolving review threads
-   - When to mark PRs ready vs keep in draft
-
-**Do not skip this phase.** Understanding delegation enables parallel work on multiple PRs. Understanding the PR workflow ensures you iterate correctly until all reviews are resolved.
-</IMPORTANT>
-
-<IMPORTANT>
-**THIS IS AN ACTION-ORIENTED WORKFLOW, NOT A REPORTING WORKFLOW.**
-
-- **DO NOT** just list tickets and PRs - actually work on them
-- **DO NOT** report "this PR has review comments" - fix the comments yourself
-- **DO NOT** add items to Phase 4 unless they genuinely require human intervention (credentials, platform access, manual QA, Slack communication)
-- **DELEGATE** substantial tasks to sub-agents to parallelize work
-
-The only items in Phase 4 should be things the agent literally cannot do:
-- Ping someone on Slack (agent has no Slack access)
-- Test on Windows (agent has no Windows machine)
-- Use a specific API key (agent doesn't have the credential)
-- Make org-level decisions (requires human judgment)
-</IMPORTANT>
+- This is for action, not reporting: work tickets/PRs; do not merely list them.
+- Resolve review comments yourself; do not report them as needing attention.
+- Delegate substantial independent tickets/PRs.
+- Phase 4 is only for things the agent literally cannot do: Slack/email outreach, Windows or other unavailable platform testing, missing credentials/API keys, external-service access, or org-level decisions.
+- Every examined Linear ticket and PR must appear in the final summary with a link.
 
 ## Phase 1: Linear Tickets
 
-### Fetch My Assigned Tickets
+Use Linear MCP tools; do not call the Linear API directly. Fetch assigned, incomplete tickets with `list_issues` using `assignee: "me"` and excluding completed/canceled states. Use `get_issue` for full descriptions, labels, blockers, comments, attachments, and linked GitHub context.
 
-If Linear MCP tools are available, prefer them over raw API calls.
+Priority: `1 Urgent` → now, `2 High` → first, `3 Medium` → after high, `4 Low` → later.
 
-**Preferred (MCP):**
-- Use `list_issues` with `assignee="me"` to enumerate your assigned issues
-- Use `get_issue` to read the full body, attachments, and linked GitHub context for a specific ticket
+For every ticket:
+1. Read it fully.
+2. Exclude if blocked by another active issue or labeled `Blocked`.
+3. If it links to an active GitHub issue/PR, treat GitHub as source of truth and surface the direct link, not duplicate Linear-only work.
+4. If code/repo context exists and no active GitHub work exists, clone/investigate.
+5. Reproduce/fix bugs, implement clear features, investigate monitoring/DataDog errors, write docs.
+6. Add to Phase 4 only after trying and finding a real manual blocker.
 
-**Fallback (API key / curl):**
-
-```bash
-curl -s -X POST https://api.linear.app/graphql \
-  -H "Content-Type: application/json" \
-  -H "Authorization: $LINEAR_API_KEY" \
-  -d '{
-    "query": "query { viewer { assignedIssues(first: 50, filter: { state: { type: { nin: [\"completed\", \"canceled\"] } } }) { nodes { identifier title priority priorityLabel state { name type } description } } } }"
-  }' | jq '.data.viewer.assignedIssues.nodes | sort_by(.priority)'
-```
-
-### Priority Order
-
-| Priority | Label | Action |
-|----------|-------|--------|
-| 1 | Urgent | Work immediately |
-| 2 | High | Work first |
-| 3 | Medium | After high priority |
-| 4 | Low | When time permits |
-
-### For Each Ticket: TAKE ACTION
-
-<IMPORTANT>
-**ALWAYS attempt to work on every ticket unless it is explicitly blocked or already being handled through linked GitHub work. Never skip with "can investigate if desired".**
-
-For each ticket:
-1. Read the description fully
-2. If it is blocked by another active issue or labeled `Blocked`, do not treat it as actionable
-3. If it links to an active GitHub issue/PR, treat GitHub as the source of truth and include the direct link instead of duplicating separate Linear-only work
-4. If it references code/repos and is not already tracked on GitHub, clone and investigate
-5. If it's a bug, attempt to reproduce and fix it
-6. If it's a feature, attempt to implement it
-7. Only add to Phase 4 if you genuinely cannot proceed after trying
-</IMPORTANT>
-
-**Actionable (DO THE WORK):**
-- Bug fixes with GitHub links but no active PR yet → Clone repo, investigate, fix bug, open/update PR
-- Linear issues linked to an active GitHub PR → Continue the work through that PR and surface the direct PR link in the summary
-- DataDog/monitoring errors → Investigate the codebase, find root cause, fix it
-- Feature requests with clear specs → Implement the feature
-- Investigation tasks → Actually investigate and report findings with conclusions
-- Documentation tasks → Write the documentation
-
-**Delegate to Sub-Agent:**
-- If the ticket requires substantial work (>5 minutes), delegate it
-- See [sub-agent-delegation](../sub-agent-delegation/SKILL.md)
-
-**Exclude from actionable work:**
-- Tickets blocked by another active issue
-- Tickets labeled `Blocked`
-
-**Add to Phase 4 ONLY if truly manual (after attempting work):**
-- Tickets with only Slack links (no repo/code context)
-- "Contact X" or "Send email to Y" tasks
-- Discussion/meeting requests
-- Org-level decisions requiring human judgment
+Manual-only examples: Slack-only context, “contact/send email” tasks, meeting/discussion requests, org decisions.
 
 ## Phase 2: Ready PRs
 
-**Use the [github-pr-workflow](../github-pr-workflow/SKILL.md) skill for all PR operations.**
-
-For each ready PR, check the PR Readiness Checklist. If ANY condition fails, move to draft and process in Phase 3.
-
-<IMPORTANT>
-A PR is **not** ready just because CI passes or because the body contains `## Testing` / `## Evidence` headings. For non-content PRs, the `## Evidence` section must contain concrete proof from a real live run (for example, a screenshot or fenced command input/output). An empty heading, a prose summary, or an evidence section that says verification is blocked/manual does **not** satisfy readiness.
-</IMPORTANT>
-
-### Stale PR Detection
-
-PRs are stale if in ready state for >2 business days without approving reviews.
-
-<IMPORTANT>
-**Staleness is measured from when the PR became ready for review, NOT creation date.**
-</IMPORTANT>
-
-```bash
-# Check when PR was last marked ready
-gh api repos/OWNER/REPO/issues/NUMBER/timeline --jq '
-  [.[] | select(.event == "ready_for_review")] | last | .created_at'
-```
-
-Report stale PRs for human follow-up (Slack ping).
+For each ready PR, use the [iterate skill](https://github.com/OpenHands/extensions/tree/main/skills/iterate) rather than duplicating PR-specific instructions here. Drive the PR through the verification layers that exist for that repo, fix issues directly, and only report stale/blocked PRs when human help is actually needed.
 
 ## Phase 3: Draft PRs
 
-**Follow the [github-pr-workflow](../github-pr-workflow/SKILL.md) skill for each draft PR.**
+Use the [iterate skill](https://github.com/OpenHands/extensions/tree/main/skills/iterate) for draft PRs as well. Delegate multiple/substantial PRs, and keep only genuine human blockers in Phase 4.
 
-That skill covers the complete PR Readiness Checklist including:
-- Evidence requirements (END-TO-END, not unit tests)
-- Review iteration loop
-- Code quality checks
-- All GraphQL commands needed
+## Phase 4: Final Summary
 
-### Parallelization
-
-For multiple draft PRs, delegate to sub-agents. See [sub-agent-delegation](../sub-agent-delegation/SKILL.md).
-
-### When to Add to Phase 4
-
-PRs remain in DRAFT if live evidence cannot be gathered due to missing credentials, platform requirements, or external service access. Do not move them to ready-for-review based only on CI, unit tests, a `## Testing` section, or a written summary. Add an `## Evidence` section that says what you tried, what blocked live verification, and the exact manual verification steps a human should run.
-
-## Phase 4: Complete Status Summary
-
-<IMPORTANT>
-**EVERY PR and Linear ticket examined MUST appear in the final summary.**
-This is not optional - the user needs a complete picture of their work items.
-</IMPORTANT>
-
-At the end of the workflow, ALWAYS provide a **complete status summary** with two sections:
-
-### Section 1: All Items Status
-
-List EVERY item examined with its current status. **Include a link to each item.**
+Always end with both sections below.
 
 ```markdown
 ## 📊 Complete Status Summary
@@ -225,27 +69,19 @@ List EVERY item examined with its current status. **Include a link to each item.
 |--------|-------|--------|----------------------|
 | [ALL-1234](https://linear.app/all-hands/issue/ALL-1234) | Fix bug X | ✅ Resolved | Opened PR #123 |
 | [ALL-5678](https://linear.app/all-hands/issue/ALL-5678) | Contact Y | 🔶 Manual | Requires Slack outreach |
-| [PLTF-99](https://linear.app/all-hands/issue/PLTF-99) | Migrate Z | 🔶 Manual | Needs org admin decision |
 
 ### Ready PRs
 | PR | Title | Status | Action Taken / Needed |
 |----|-------|--------|----------------------|
 | [repo#123](https://github.com/org/repo/pull/123) | Fix bug | ✅ Merged | Approved and merged |
-| [repo#456](https://github.com/org/repo/pull/456) | Add feature | ✅ Ready | All reviews resolved |
 | [repo#789](https://github.com/org/repo/pull/789) | Update docs | 🔶 Stale | Needs reviewer ping on Slack |
 
-### Draft PRs  
+### Draft PRs
 | PR | Title | Status | Action Taken / Needed |
 |----|-------|--------|----------------------|
 | [repo#111](https://github.com/org/repo/pull/111) | Refactor | ✅ Fixed | Addressed feedback, marked ready |
 | [repo#222](https://github.com/org/repo/pull/222) | New API | 🔶 Blocked | Needs Windows testing |
-```
 
-### Section 2: Items Requiring Human Help
-
-All items the agent cannot do. Do NOT include items that simply have issues like failing CI, these should be fixed by the agent.
-
-```markdown
 ## 📋 Action Items Requiring Your Help
 
 ### 🗣️ Manual Communication (Slack/Email)
@@ -269,45 +105,12 @@ All items the agent cannot do. Do NOT include items that simply have issues like
 | [PLTF-99](https://linear.app/all-hands/issue/PLTF-99) | Requires org admin decision on migration |
 ```
 
-After the summary, confirm:
-> I have taken action on all items where I could. The items above are the only ones requiring your help.
+Then say: “I have taken action on all items where I could. The items above are the only ones requiring your help.”
 
-## Important Notes
+## Quick References
 
-<IMPORTANT>
-- ALWAYS end with the categorized action items (Phase 4)
-- Follow github-pr-workflow skill for ALL PR work
-- For stale PRs, report direct links so user can ping reviewers
-- Do NOT list reviews as "needing attention" - resolve them yourself
-- Ask for confirmation before working on unclear tickets
-- **Delegate substantial tasks**: If a ticket or PR involves work that would take several minutes or more and is self-contained (e.g., refactoring a module, running extensive tests, researching across repos), use [sub-agent-delegation](../sub-agent-delegation/SKILL.md) to parallelize work
-</IMPORTANT>
-
----
-
-## FAQ
-
-### What services can you not access?
-
-If you do not have an API key or credential for a service, you cannot access it. This includes:
-- Slack (no messaging access)
-- Notion (no access to Notion MCP due to OAuth)
-- Figma (no access to Figma MCP due to OAuth)
-
-For these you will need to ask for human help.
-
-### How do I run evaluations without local infrastructure?
-
-Use the OpenHands CI system. See [eval-with-ci](../eval-with-ci/SKILL.md) for the supported `run-eval-*` labels, workflow dispatch options, and monitoring steps.
-
-### What if I can't test a PR locally?
-
-See "When Evidence Truly Cannot Be Gathered" in [github-pr-workflow](../github-pr-workflow/SKILL.md).
-
-### How do I start Docker for testing?
-
-See the [docker skill](https://github.com/OpenHands/extensions/tree/main/skills/docker).
-
-### How do I investigate Datadog errors?
-
-See the [datadog skill](https://github.com/OpenHands/extensions/tree/main/skills/datadog). The agent has Datadog access via `DD_API_KEY`, `DD_APP_KEY`, `DD_SITE`.
+- No access without credentials/API keys; commonly manual: Slack messaging, Notion OAuth, Figma OAuth.
+- Evaluations: [eval-with-ci](../eval-with-ci/SKILL.md).
+- PR iteration: [iterate skill](https://github.com/OpenHands/extensions/tree/main/skills/iterate).
+- Docker testing: [docker skill](https://github.com/OpenHands/extensions/tree/main/skills/docker).
+- DataDog: [datadog skill](https://github.com/OpenHands/extensions/tree/main/skills/datadog); env vars are `DD_API_KEY`, `DD_APP_KEY`, `DD_SITE`.
