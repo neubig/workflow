@@ -13,7 +13,7 @@
         {
             "name": "daily-workflow",
             "source": "./daily-workflow",
-            "description": "Graham's daily workflow for managing Linear tickets and GitHub PRs with specific prioritization rules and resource tracking",
+            "description": "Graham's human-in-the-loop workflow for aligning open PRs, GitHub issues, Linear tickets, and Slack-derived work",
             "category": "workflow",
             "keywords": [
                 "linear",

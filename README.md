@@ -6,7 +6,7 @@ This repository contains OpenHands skills for managing daily development workflo
 
 | Skill | Description | Triggers |
 |-------|-------------|----------|
-| [daily-workflow](./skills/daily-workflow/SKILL.md) | Graham's daily workflow for Linear tickets and GitHub PRs | `daily workflow`, `my workflow`, `graham workflow` |
+| [daily-workflow](./skills/daily-workflow/SKILL.md) | Human-in-the-loop alignment of open PRs, GitHub issues, Linear tickets, and Slack-derived work | `daily workflow`, `my workflow`, `graham workflow` |
 | [eval-with-ci](./skills/eval-with-ci/SKILL.md) | Run SDK evaluations through the GitHub Actions-based CI workflow | `run eval`, `evaluation`, `benchmark`, `swebench` |
 | [giant-eagle](./skills/giant-eagle/SKILL.md) | Find Giant Eagle grocery products and recipe ingredient substitutions using site links and the product search API | `giant eagle`, `grocery ingredients`, `buy ingredients`, `recipe shopping` |
 | [sub-agent-delegation](./skills/sub-agent-delegation/SKILL.md) | Delegate substantial tasks to sub-agents via DelegateTool or Cloud API | `delegate task`, `sub-agent`, `spawn agent`, `parallel task` |

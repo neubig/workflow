@@ -1,6 +1,6 @@
 ---
 name: daily-workflow
-description: Graham's daily workflow for managing Linear tickets and GitHub PRs. Prioritizes work by Linear priority, manages PR review cycles, and tracks resources needed for testing.
+description: Graham's human-in-the-loop daily workflow for aligning open GitHub PRs, GitHub issues, Linear tickets, and recent Slack requests before choosing development work.
 triggers:
 - daily workflow
 - my workflow
@@ -9,108 +9,114 @@ triggers:
 
 # Graham's Daily Workflow
 
-Use this skill to execute Graham's daily work, not merely plan or report on it. It gathers assigned Linear tickets and GitHub PRs, prioritizes them, does agent-actionable work directly, delegates larger independent tasks, and reserves the final action list for true human blockers.
+Use this skill when Graham asks for the daily workflow. The goal is to make the work queue coherent before doing implementation work: every open PR should have a GitHub issue, every relevant issue should be assigned to Graham and tracked in Linear, Slack-derived work should be proposed for confirmation, and Linear tickets should be reviewed in priority order with concrete readiness status.
 
-## Start Here
+## Operating Rules
 
-Begin by building a complete picture of the work queue. Linear is the source for assigned tickets and priorities; GitHub is the source for PR status, reviews, CI, and evidence. Use Linear MCP tools for ticket triage, then use the fetch script for GitHub PR triage only:
+- Be human-in-the-loop. Propose new GitHub issues or Linear tickets before creating them from Slack messages or ambiguous context.
+- Prefer Linear MCP tools for Linear reads/writes. If Linear tools are unavailable, say so and ask for access rather than documenting raw API workarounds.
+- Prefer GitHub tools or `gh` for GitHub reads/writes.
+- Check Slack only when a Slack connector/tool is available. If unavailable, report that Slack intake could not be checked.
+- Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to Graham.
+- Do not start implementation work during this workflow unless Graham explicitly asks for it after the status pass.
+
+## Step 1: Inventory Open PRs and Their Issues
+
+Find all open PRs authored by `neubig`:
 
 ```bash
-GITHUB_TOKEN="$GITHUB_TOKEN" python workflow/scripts/daily-workflow-fetch.py --github-user neubig --skip-linear
+gh search prs --author neubig --state open --json repository,number,title,url,isDraft
 ```
 
-Pass `GITHUB_TOKEN` explicitly so secret injection works. The script output groups ready PRs with staleness based on ready-for-review time and draft PRs by action: 🔴 fix CI, 🟡 gather evidence, 🟢 mark ready.
+For each PR:
+1. Read the PR body, timeline, linked issues, closing keywords, and development links.
+2. Determine whether it is associated with at least one GitHub issue.
+3. Record each associated issue and whether it is assigned to Graham.
 
-Before acting, read:
-- [sub-agent-delegation](../sub-agent-delegation/SKILL.md): delegate self-contained work >5 minutes.
-- [iterate](https://github.com/OpenHands/extensions/tree/main/skills/iterate): drive GitHub PRs through CI, review, and QA until merge-ready.
+If a PR has no associated issue:
+1. Search for related issues in the same repository using title keywords, branch names, and PR body terms.
+2. If a related issue exists, associate it with the PR by adding a clear issue link or closing keyword to the PR body, depending on whether the PR should close the issue.
+3. If no related issue exists, create a concise GitHub issue in the same repository, assign it to Graham, and associate the PR with it.
 
-## Core Rules
+Only create a GitHub issue without asking Graham when the PR itself provides unambiguous code context. If the context is unclear, propose the issue title/body first.
 
-- This is for action, not reporting: work tickets/PRs; do not merely list them.
-- Resolve review comments yourself; do not report them as needing attention.
-- Delegate substantial independent tickets/PRs.
-- Phase 4 is only for things the agent literally cannot do: Slack/email outreach, Windows or other unavailable platform testing, missing credentials/API keys, external-service access, or org-level decisions.
-- Every examined Linear ticket and PR must appear in the final summary with a link.
+## Step 2: Ensure GitHub Issues Are Assigned
 
-## Phase 1: Linear Tickets
+For every issue associated with Graham's open PRs:
+1. Check the issue assignees.
+2. Assign the issue to `neubig` if Graham is not already assigned and the repository permits it.
+3. If assignment fails because of permissions or repository rules, include that issue in the final action list.
 
-Use Linear MCP tools; do not call the Linear API directly. Fetch assigned, incomplete tickets with `list_issues` using `assignee: "me"` and excluding completed/canceled states. Use `get_issue` for full descriptions, labels, blockers, comments, attachments, and linked GitHub context.
+## Step 3: Ensure Linear Tracking
 
-Priority: `1 Urgent` → now, `2 High` → first, `3 Medium` → after high, `4 Low` → later.
+For every associated GitHub issue:
+1. Check whether it has been ingested into Linear.
+2. If a matching Linear ticket exists, verify it is assigned to Graham.
+3. If the Linear ticket is unassigned or assigned to someone else, assign it to Graham unless there is clear evidence that another owner is intentional.
+4. If no Linear ticket exists, create or request ingestion according to the available Linear/GitHub integration tooling, then assign the resulting ticket to Graham.
 
-For every ticket:
-1. Read it fully.
-2. Exclude if blocked by another active issue or labeled `Blocked`.
-3. If it links to an active GitHub issue/PR, treat GitHub as source of truth and surface the direct link, not duplicate Linear-only work.
-4. If code/repo context exists and no active GitHub work exists, clone/investigate.
-5. Reproduce/fix bugs, implement clear features, investigate monitoring/DataDog errors, write docs.
-6. Add to Phase 4 only after trying and finding a real manual blocker.
+If Linear tools are unavailable, continue the rest of the workflow and list the exact Linear checks that could not be completed.
 
-Manual-only examples: Slack-only context, “contact/send email” tasks, meeting/discussion requests, org decisions.
+## Step 4: Slack Intake
 
-## Phase 2: Ready PRs
+Check recent Slack messages directed to Graham and recent threads where Graham participated. Look for requests that imply follow-up work.
 
-For each ready PR, use the [iterate skill](https://github.com/OpenHands/extensions/tree/main/skills/iterate) rather than duplicating PR-specific instructions here. Drive the PR through the verification layers that exist for that repo, fix issues directly, and only report stale/blocked PRs when human help is actually needed.
+Classify each candidate:
 
-## Phase 3: Draft PRs
+| Candidate | Create In | Criteria |
+|-----------|-----------|----------|
+| Code work | GitHub issue | Bug, feature, repo-specific investigation, failing code, docs/code change |
+| Non-code work | Linear ticket | Planning, coordination, customer follow-up, process, research, decision tracking |
+| No ticket | None | FYI, already tracked, social/status-only, too ambiguous |
 
-Use the [iterate skill](https://github.com/OpenHands/extensions/tree/main/skills/iterate) for draft PRs as well. Delegate multiple/substantial PRs, and keep only genuine human blockers in Phase 4.
+For every candidate, propose:
+- source Slack channel/thread link
+- proposed destination: GitHub issue or Linear ticket
+- title
+- short body
+- assignee
+- reason it should be tracked
 
-## Phase 4: Final Summary
+Ask Graham to confirm before creating any Slack-derived GitHub issue or Linear ticket.
 
-Always end with both sections below.
+## Step 5: Walk Linear Tickets by Priority
+
+Fetch Graham's incomplete assigned Linear tickets and sort by priority:
+`1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`.
+
+For each ticket, report:
+1. **Open PR?** Link the PR if one exists. If none exists, say `No`.
+2. **CI status:** passing, failing, pending, missing, or unknown.
+3. **Review status:** passing review, changes requested/unresolved comments, awaiting review, or unknown.
+4. **Live-code evidence:** whether the PR shows evidence that live code failed before and passed after. For non-bug work, evidence should show the live feature or workflow running successfully.
+5. **If no PR is open:** the additional context, credentials, repository access, environment, or decision needed to start work. If nothing is missing, say what repo/task context is enough to start.
+
+Do not mark a ticket as ready based only on unit tests. Live-code evidence is required unless the PR is truly content-only.
+
+## Final Output
+
+End with these sections:
 
 ```markdown
-## 📊 Complete Status Summary
+## PR Issue Alignment
 
-### Linear Tickets
-| Ticket | Title | Status | Action Taken / Needed |
-|--------|-------|--------|----------------------|
-| [ALL-1234](https://linear.app/all-hands/issue/ALL-1234) | Fix bug X | ✅ Resolved | Opened PR #123 |
-| [ALL-5678](https://linear.app/all-hands/issue/ALL-5678) | Contact Y | 🔶 Manual | Requires Slack outreach |
+| PR | Associated Issue | Issue Assigned To Graham | Linear Tracked | Action |
+|----|------------------|--------------------------|----------------|--------|
 
-### Ready PRs
-| PR | Title | Status | Action Taken / Needed |
-|----|-------|--------|----------------------|
-| [repo#123](https://github.com/org/repo/pull/123) | Fix bug | ✅ Merged | Approved and merged |
-| [repo#789](https://github.com/org/repo/pull/789) | Update docs | 🔶 Stale | Needs reviewer ping on Slack |
+## Slack Proposals
 
-### Draft PRs
-| PR | Title | Status | Action Taken / Needed |
-|----|-------|--------|----------------------|
-| [repo#111](https://github.com/org/repo/pull/111) | Refactor | ✅ Fixed | Addressed feedback, marked ready |
-| [repo#222](https://github.com/org/repo/pull/222) | New API | 🔶 Blocked | Needs Windows testing |
+| Source | Proposed Ticket | Destination | Reason | Awaiting Confirmation |
+|--------|-----------------|-------------|--------|-----------------------|
 
-## 📋 Action Items Requiring Your Help
+## Linear Priority Walkthrough
 
-### 🗣️ Manual Communication (Slack/Email)
-| Item | Action Needed |
-|------|---------------|
-| [repo#789](https://github.com/org/repo/pull/789) | Ping reviewer on Slack (stale >2 days) |
+| Linear | Priority | Open PR | CI | Review | Live Evidence | Context Needed |
+|--------|----------|---------|----|--------|---------------|----------------|
 
-### 🖥️ Platform / Environment Access
-| PR | Resource Needed |
-|----|-----------------|
-| [repo#222](https://github.com/org/repo/pull/222) | Windows machine for testing |
+## Action Items Requiring Graham
 
-### 🔑 Credentials / API Keys Needed
-| PR | Resource Needed |
-|----|-----------------|
-| [repo#333](https://github.com/org/repo/pull/333) | API key for service X |
-
-### ❓ Decisions / Clarification Needed
-| Item | Question |
-|------|----------|
-| [PLTF-99](https://linear.app/all-hands/issue/PLTF-99) | Requires org admin decision on migration |
+| Item | Needed |
+|------|--------|
 ```
 
-Then say: “I have taken action on all items where I could. The items above are the only ones requiring your help.”
-
-## Quick References
-
-- No access without credentials/API keys; commonly manual: Slack messaging, Notion OAuth, Figma OAuth.
-- Evaluations: [eval-with-ci](../eval-with-ci/SKILL.md).
-- PR iteration: [iterate skill](https://github.com/OpenHands/extensions/tree/main/skills/iterate).
-- Docker testing: [docker skill](https://github.com/OpenHands/extensions/tree/main/skills/docker).
-- DataDog: [datadog skill](https://github.com/OpenHands/extensions/tree/main/skills/datadog); env vars are `DD_API_KEY`, `DD_APP_KEY`, `DD_SITE`.
+If a tool or credential was missing, include it in `Action Items Requiring Graham` with the exact access needed.
