@@ -10,6 +10,7 @@ This repository contains OpenHands skills for managing daily development workflo
 | [eval-with-ci](./skills/eval-with-ci/SKILL.md) | Run SDK evaluations through the GitHub Actions-based CI workflow | `run eval`, `evaluation`, `benchmark`, `swebench` |
 | [giant-eagle](./skills/giant-eagle/SKILL.md) | Find Giant Eagle grocery products and recipe ingredient substitutions using site links and the product search API | `giant eagle`, `grocery ingredients`, `buy ingredients`, `recipe shopping` |
 | [sub-agent-delegation](./skills/sub-agent-delegation/SKILL.md) | Delegate substantial tasks to sub-agents via DelegateTool or Cloud API | `delegate task`, `sub-agent`, `spawn agent`, `parallel task` |
+| [tunnel-to-babel](./skills/tunnel-to-babel/SKILL.md) | Start Agent Canvas backend tunnels on Babel Slurm with debug CPU or general L40S GPU jobs | `tunnel to babel`, `babel tunnel`, `slurm tunnel` |
 | [openhands-slides](./skills/openhands-slides/SKILL.md) | Create branded reveal.js slide presentations with OpenHands styling and PDF export | `create slides`, `presentation`, `slide deck`, `slides` |
 | [webflow](./skills/webflow/SKILL.md) | Interact with Webflow sites, CMS collections, pages, assets, and custom code | `webflow`, `webflow api`, `webflow cms`, `webflow site` |
 

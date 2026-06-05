@@ -49,6 +49,19 @@
                 "background",
                 "cloud-api"
             ]
+        },
+        {
+            "name": "tunnel-to-babel",
+            "source": "./tunnel-to-babel",
+            "description": "Create Agent Canvas backend tunnels on Babel Slurm with debug CPU or general L40S GPU jobs",
+            "category": "workflow",
+            "keywords": [
+                "babel",
+                "slurm",
+                "tunnel",
+                "agent-canvas",
+                "openhands"
+            ]
         }
     ],
     "dependencies": {
