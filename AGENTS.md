@@ -7,3 +7,5 @@
 - `scripts/daily-workflow-fetch.py` should exclude Linear tickets that are blocked by another active issue or labeled `Blocked`.
 - Linear MCP tools are the expected interface for Linear reads/writes in workflow skills; do not document or use raw Linear API key shell calls for daily workflow triage.
 - Giant Eagle product search can be automated via `https://core.shop.gianteagle.com/api/v2` using the `GetProducts` GraphQL query and `storeCode: "VIRTUAL"`; direct product links use `/grocery/search/product/{sku}`.
+- `evaluate-flame-apps` evaluates undecided FLAME cluster applications from the shared Google Sheet (`gid=1803896643`), writes only to a new sheet or CSV, and must not modify existing tabs.
+

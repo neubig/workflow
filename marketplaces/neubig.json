@@ -38,6 +38,20 @@
             ]
         },
         {
+            "name": "evaluate-flame-apps",
+            "source": "./evaluate-flame-apps",
+            "description": "Evaluate undecided FLAME cluster applications with the high-priority rubric and plan 32-node GPU allocations without modifying existing sheets",
+            "category": "workflow",
+            "keywords": [
+                "flame",
+                "cluster",
+                "gpu",
+                "allocation",
+                "evaluation",
+                "rubric"
+            ]
+        },
+        {
             "name": "sub-agent-delegation",
             "source": "./sub-agent-delegation",
             "description": "Delegate substantial, self-contained tasks to sub-agents for parallel execution",
