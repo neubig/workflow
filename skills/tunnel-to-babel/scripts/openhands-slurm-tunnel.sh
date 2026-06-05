@@ -33,6 +33,10 @@ Options:
                              default: 127.0.0.1
   --local-port PORT          Local port to open
                              default: 8002
+  --public-url URL           Public URL that should route to the local tunnel
+                             default: https://statusquo-amd-ohbabel.ngrok-free.app
+  --api-check-path PATH      Authenticated API path to validate through local and public URLs
+                             default: /api/conversations/search
   --server-port PORT         Ingress port used by the backend stack on the compute node
                              default: 8000
   --compute-user USER        SSH username for the compute node
@@ -55,6 +59,8 @@ Options:
                              default: 900
   --server-timeout SECONDS   Max time to wait for /health through the tunnel
                              default: 240
+  --public-timeout SECONDS   Max time to wait for authenticated public URL access
+                             default: 120
   --poll-interval SECONDS    Slurm polling interval
                              default: 3
   --keep-job                 Do not scancel the Slurm job when this exits
@@ -66,6 +72,8 @@ Environment overrides:
   OH_REMOTE_REPO_DIR
   OH_LOCAL_BIND
   OH_LOCAL_PORT
+  OH_PUBLIC_URL
+  OH_API_CHECK_PATH
   OH_SERVER_PORT
   OH_ALLOW_CORS_ORIGINS
   OH_SLURM_JOB_NAME
@@ -77,6 +85,7 @@ Environment overrides:
   OH_SECRET_KEY
   OH_SECRET_KEY_DOTENV
   OH_SECRET_KEY_FILE
+  OH_PUBLIC_TIMEOUT
 
 The default start command is:
 
@@ -146,6 +155,8 @@ else
 fi
 LOCAL_BIND=${OH_LOCAL_BIND:-127.0.0.1}
 LOCAL_PORT=${OH_LOCAL_PORT:-8002}
+PUBLIC_URL=${OH_PUBLIC_URL:-https://statusquo-amd-ohbabel.ngrok-free.app}
+API_CHECK_PATH=${OH_API_CHECK_PATH:-/api/conversations/search}
 SERVER_HOST=127.0.0.1
 SERVER_PORT=${OH_SERVER_PORT:-8000}
 ALLOW_CORS_ORIGINS=${OH_ALLOW_CORS_ORIGINS:-'["http://localhost:3001","http://localhost:8001"]'}
@@ -160,6 +171,7 @@ NODE_BIN=${OH_NODE_BIN:-}
 DEFAULT_GRES=${OH_SLURM_GRES-gpu:1}
 QUEUE_TIMEOUT=900
 SERVER_TIMEOUT=240
+PUBLIC_TIMEOUT=${OH_PUBLIC_TIMEOUT:-120}
 POLL_INTERVAL=3
 KEEP_JOB=0
 
@@ -183,6 +195,12 @@ while (($#)); do
       ;;
     --local-port)
       shift; (($#)) || die "--local-port requires a value"; LOCAL_PORT=$1
+      ;;
+    --public-url)
+      shift; (($#)) || die "--public-url requires a value"; PUBLIC_URL=$1
+      ;;
+    --api-check-path)
+      shift; (($#)) || die "--api-check-path requires a value"; API_CHECK_PATH=$1
       ;;
     --server-port)
       shift; (($#)) || die "--server-port requires a value"; SERVER_PORT=$1
@@ -235,6 +253,9 @@ while (($#)); do
     --server-timeout)
       shift; (($#)) || die "--server-timeout requires a value"; SERVER_TIMEOUT=$1
       ;;
+    --public-timeout)
+      shift; (($#)) || die "--public-timeout requires a value"; PUBLIC_TIMEOUT=$1
+      ;;
     --poll-interval)
       shift; (($#)) || die "--poll-interval requires a value"; POLL_INTERVAL=$1
       ;;
@@ -256,6 +277,7 @@ done
 [[ $SERVER_PORT =~ ^[0-9]+$ ]] || die "--server-port must be numeric"
 [[ $QUEUE_TIMEOUT =~ ^[0-9]+$ ]] || die "--queue-timeout must be numeric"
 [[ $SERVER_TIMEOUT =~ ^[0-9]+$ ]] || die "--server-timeout must be numeric"
+[[ $PUBLIC_TIMEOUT =~ ^[0-9]+$ ]] || die "--public-timeout must be numeric"
 [[ $POLL_INTERVAL =~ ^[0-9]+$ ]] || die "--poll-interval must be numeric"
 [[ $POLL_INTERVAL -gt 0 ]] || die "--poll-interval must be greater than zero"
 
@@ -270,6 +292,32 @@ fi
 require_cmd ssh
 require_cmd curl
 require_cmd openssl
+
+api_status() {
+  local base_url=$1
+  curl -sS -L --max-time 5 -o /dev/null -w '%{http_code}' \
+    -H "X-Session-API-Key: $SESSION_KEY" \
+    -H "ngrok-skip-browser-warning: 1" \
+    "${base_url%/}${API_CHECK_PATH}" || true
+}
+
+wait_for_authenticated_api() {
+  local label=$1 base_url=$2 timeout=$3 deadline status
+  deadline=$((SECONDS + timeout))
+  while :; do
+    status=$(api_status "$base_url")
+    case "$status" in
+      2*|3*)
+        log "$label authenticated API reachable at ${base_url%/}${API_CHECK_PATH}"
+        return 0
+        ;;
+    esac
+    if ((SECONDS >= deadline)); then
+      die "$label authenticated API did not become reachable at ${base_url%/}${API_CHECK_PATH}; last HTTP status: ${status:-none}"
+    fi
+    sleep 2
+  done
+}
 
 if [[ -z ${OH_SECRET_KEY:-} ]]; then
   DOTENV_SECRET_FILE=${OH_SECRET_KEY_DOTENV:-}
@@ -722,6 +770,11 @@ until curl -fsS --max-time 2 "${LOCAL_URL}/health" >/dev/null 2>&1; do
   sleep 2
 done
 
+wait_for_authenticated_api "local tunnel" "$LOCAL_URL" "$SERVER_TIMEOUT"
+if [[ -n $PUBLIC_URL ]]; then
+  wait_for_authenticated_api "public URL" "$PUBLIC_URL" "$PUBLIC_TIMEOUT"
+fi
+
 local_state_root=${XDG_RUNTIME_DIR:-$HOME/.cache}/openhands-slurm-tunnel
 mkdir -p "$local_state_root"
 chmod 700 "$local_state_root"
@@ -732,6 +785,8 @@ LOCAL_ENV_FILE="$local_state_root/${JOB_NAME}-${JOB_ID}.env"
   printf 'OPENHANDS_AUTOMATION_API_URL=%q\n' "${LOCAL_URL}/api/automation"
   printf 'OPENHANDS_AUTOMATION_API_KEY=%q\n' "$SESSION_KEY"
   printf 'OH_SESSION_API_KEYS_0=%q\n' "$SESSION_KEY"
+  printf 'OH_SESSION_API_KEY_FILE=%q\n' "$SESSION_KEY_FILE"
+  printf 'OPENHANDS_PUBLIC_URL=%q\n' "$PUBLIC_URL"
   printf 'SLURM_JOB_ID=%q\n' "$JOB_ID"
   printf 'SLURM_NODE=%q\n' "$COMPUTE_NODE"
   printf 'REMOTE_STATE_DIR=%q\n' "$REMOTE_STATE_DIR"
@@ -741,8 +796,12 @@ chmod 600 "$LOCAL_ENV_FILE"
 printf '\n'
 printf 'Agent Canvas backend stack is reachable through the tunnel.\n'
 printf '  Ingress URL: %s\n' "$LOCAL_URL"
+if [[ -n $PUBLIC_URL ]]; then
+  printf '  Public URL: %s\n' "$PUBLIC_URL"
+fi
 printf '  Automation API: %s/api/automation\n' "$LOCAL_URL"
 printf '  Automation docs: %s/api/automation/docs\n' "$LOCAL_URL"
+printf '  Session API key file: %s\n' "$SESSION_KEY_FILE"
 printf '  Env file: %s\n' "$LOCAL_ENV_FILE"
 printf '  Slurm job: %s on %s\n' "$JOB_ID" "$COMPUTE_NODE"
 printf '\n'
