@@ -26,6 +26,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+NON_ACTIONABLE_LINEAR_STATE_TYPES = ("completed", "canceled", "duplicate")
+
+
 @dataclass(frozen=True)
 class ExternalLink:
     title: str
@@ -47,7 +50,7 @@ class LinearTicket:
 
     @property
     def is_actionable(self) -> bool:
-        return self.state_type not in ("completed", "canceled")
+        return self.state_type not in NON_ACTIONABLE_LINEAR_STATE_TYPES
 
     @property
     def referenced_repos(self) -> list[str]:
@@ -418,6 +421,26 @@ def run_gh(args: list[str]) -> dict[str, Any] | list[Any] | str | int:
         return output
 
 
+def linear_node_is_blocked(node: dict[str, Any]) -> bool:
+    """Return True when a Linear issue should be omitted from daily workflow."""
+    state_type = node.get("state", {}).get("type")
+    if state_type == "blocked":
+        return True
+
+    labels = [l["name"] for l in node.get("labels", {}).get("nodes", [])]
+    normalized_labels = {label.strip().lower() for label in labels}
+    if "blocked" in normalized_labels:
+        return True
+
+    inverse_relations = node.get("inverseRelations", {}).get("nodes", [])
+    return any(
+        rel.get("type") == "blocks"
+        and rel.get("relatedIssue", {}).get("state", {}).get("type")
+        not in NON_ACTIONABLE_LINEAR_STATE_TYPES
+        for rel in inverse_relations
+    )
+
+
 def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
     """Fetch assigned Linear tickets that are not blocked."""
     import urllib.request
@@ -434,7 +457,7 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
         query = f"""
         query {{
             viewer {{
-                assignedIssues(first: {batch_size}{after_clause}, filter: {{ state: {{ type: {{ nin: ["completed", "canceled"] }} }} }}) {{
+                assignedIssues(first: {batch_size}{after_clause}, filter: {{ state: {{ type: {{ nin: ["completed", "canceled", "duplicate"] }} }} }}) {{
                     pageInfo {{
                         hasNextPage
                         endCursor
@@ -491,22 +514,10 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
         page_info = assigned_issues.get("pageInfo", {})
 
         for node in nodes:
-            # Skip issues that are blocked by active (non-completed/canceled) issues
-            inverse_relations = node.get("inverseRelations", {}).get("nodes", [])
-            is_blocked = any(
-                rel.get("type") == "blocks"
-                and rel.get("relatedIssue", {}).get("state", {}).get("type")
-                not in ("completed", "canceled")
-                for rel in inverse_relations
-            )
-            if is_blocked:
+            if linear_node_is_blocked(node):
                 continue
 
             labels = [l["name"] for l in node.get("labels", {}).get("nodes", [])]
-            normalized_labels = {label.strip().lower() for label in labels}
-            if "blocked" in normalized_labels:
-                continue
-
             attachments = node.get("attachments", {}).get("nodes", [])
             external_links = [
                 ExternalLink(
