@@ -18,6 +18,7 @@ Use this skill when Graham asks for the daily workflow. The goal is to make the 
 - Prefer GitHub tools or `gh` for GitHub reads/writes.
 - Check Slack only when a Slack connector/tool is available. If unavailable, report that Slack intake could not be checked.
 - Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to Graham.
+- Omit blocked Linear issues from the status tables and interactive walkthrough. Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not mention blocked issues unless Graham explicitly asks for blocked work.
 - Do not start implementation work during this workflow unless Graham explicitly asks for it after the status pass.
 
 ## Step 1: Inventory Open PRs and Their Issues
@@ -81,8 +82,10 @@ Ask Graham to confirm before creating any Slack-derived GitHub issue or Linear t
 
 ## Step 5: Walk Linear Tickets by Priority
 
-Fetch Graham's incomplete assigned Linear tickets and sort by priority:
+Fetch Graham's incomplete, unblocked assigned Linear tickets and sort by priority:
 `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`.
+
+When using Linear MCP tools, do not rely on unsupported shorthand filters such as `state=uncompleted`. Either request Graham's assigned issues and filter locally, or use an explicit state/type filter that excludes completed, canceled, duplicate, and blocked work. Also exclude tickets with a `Blocked` label or an active blocker relation before building the table or starting the walkthrough.
 
 For each ticket, report:
 1. **Open PR?** Link the PR if one exists. If none exists, say `No`.
@@ -93,7 +96,7 @@ For each ticket, report:
 
 Do not mark a ticket as ready based only on unit tests. Live-code evidence is required unless the PR is truly content-only.
 
-After providing the final summary tables, continue into an interactive Linear ticket walkthrough. Walk the sorted Linear tickets one by one, starting with the highest-priority ticket. For each ticket:
+After providing the final summary tables, continue into an interactive Linear ticket walkthrough. Walk the sorted, unblocked Linear tickets one by one, starting with the highest-priority ticket. For each ticket:
 1. Give Graham a concise summary of the ticket, current state, linked GitHub work, CI/review/evidence status, and what appears to be blocked or ready.
 2. Ask Graham what the next action should be before moving to the next ticket.
 3. Do not start implementation, mutate Linear, close tickets, or skip ahead unless Graham explicitly chooses that action.

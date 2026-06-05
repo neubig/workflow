@@ -60,5 +60,57 @@ class LinearTicketActionTests(unittest.TestCase):
         self.assertNotIn("git clone", instructions)
 
 
+class LinearBlockedIssueTests(unittest.TestCase):
+    def test_blocked_state_omits_issue(self):
+        node = {
+            "state": {"type": "blocked"},
+            "labels": {"nodes": []},
+            "inverseRelations": {"nodes": []},
+        }
+
+        self.assertTrue(MODULE.linear_node_is_blocked(node))
+
+    def test_blocked_label_omits_issue(self):
+        node = {
+            "state": {"type": "unstarted"},
+            "labels": {"nodes": [{"name": "Blocked"}]},
+            "inverseRelations": {"nodes": []},
+        }
+
+        self.assertTrue(MODULE.linear_node_is_blocked(node))
+
+    def test_active_blocker_omits_issue(self):
+        node = {
+            "state": {"type": "unstarted"},
+            "labels": {"nodes": []},
+            "inverseRelations": {
+                "nodes": [
+                    {
+                        "type": "blocks",
+                        "relatedIssue": {"state": {"type": "started"}},
+                    }
+                ]
+            },
+        }
+
+        self.assertTrue(MODULE.linear_node_is_blocked(node))
+
+    def test_completed_blocker_does_not_omit_issue(self):
+        node = {
+            "state": {"type": "unstarted"},
+            "labels": {"nodes": []},
+            "inverseRelations": {
+                "nodes": [
+                    {
+                        "type": "blocks",
+                        "relatedIssue": {"state": {"type": "completed"}},
+                    }
+                ]
+            },
+        }
+
+        self.assertFalse(MODULE.linear_node_is_blocked(node))
+
+
 if __name__ == "__main__":
     unittest.main()
