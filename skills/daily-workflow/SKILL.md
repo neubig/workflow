@@ -93,6 +93,13 @@ For each ticket, report:
 
 Do not mark a ticket as ready based only on unit tests. Live-code evidence is required unless the PR is truly content-only.
 
+After providing the final summary tables, continue into an interactive Linear ticket walkthrough. Walk the sorted Linear tickets one by one, starting with the highest-priority ticket. For each ticket:
+1. Give Graham a concise summary of the ticket, current state, linked GitHub work, CI/review/evidence status, and what appears to be blocked or ready.
+2. Ask Graham what the next action should be before moving to the next ticket.
+3. Do not start implementation, mutate Linear, close tickets, or skip ahead unless Graham explicitly chooses that action.
+4. If Graham asks to skip a ticket, move to the next ticket in priority order and keep the skipped ticket in the final action list.
+5. If Linear access is unavailable, do not attempt the interactive walkthrough; instead report the missing Linear access needed to fetch assigned tickets.
+
 ## Final Output
 
 End with these sections:
