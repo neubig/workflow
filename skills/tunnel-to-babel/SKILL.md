@@ -28,6 +28,32 @@ Success means both of these work:
 
 The script validates both before printing success. If the public URL fails, fix the local SSH listener or ngrok process instead of treating the tunnel as ready.
 
+## SSH Key Auth
+
+Babel access should use SSH key authentication through the local SSH config alias `babel`, not password auth. The expected local config is:
+
+```sshconfig
+Host babel
+   HostName login.babel.cs.cmu.edu
+   User gneubig
+   IdentityFile ~/.ssh/openhands_slurm
+   IdentitiesOnly yes
+   ServerAliveInterval 60
+   ServerAliveCountMax 3
+```
+
+The tunnel script defaults to `--login babel` and uses `BatchMode=yes`, so a password prompt means key auth is not set up correctly. Do not wait at the password prompt. Verify key auth with:
+
+```bash
+ssh -o BatchMode=yes babel 'hostname'
+```
+
+If this fails, fix the local SSH key/config or authorized key on Babel before retrying the tunnel. Override the login only when necessary:
+
+```bash
+OH_BABEL_LOGIN=babel skills/tunnel-to-babel/scripts/openhands-slurm-tunnel.sh --help
+```
+
 ## CPU Tunnel on Debug
 
 Use the debug partition without GPU access:
@@ -68,7 +94,7 @@ skills/tunnel-to-babel/scripts/openhands-slurm-tunnel.sh \
 To verify the exact scheduler spelling:
 
 ```bash
-ssh gneubig@login4.babel.cs.cmu.edu \
+ssh babel \
   'sinfo -p general -o "%P|%G|%f|%N"'
 ```
 

@@ -22,8 +22,8 @@ the remote repo path. macOS-local paths such as `/Users/...` are not sent to
 Babel as defaults because they are not valid on the login/compute filesystem.
 
 Options:
-  --login USER@HOST          SSH login jump host
-                             default: gneubig@login4.babel.cs.cmu.edu
+  --login USER@HOST          SSH login jump host or SSH config alias
+                             default: babel
   --remote-repo DIR          agent-canvas checkout on the login/compute filesystem
                              default: ~/homework, with automatic
                              ~/homework/agent-canvas fallback
@@ -139,7 +139,7 @@ parse_kv() {
   done <<<"$content"
 }
 
-LOGIN=${OH_BABEL_LOGIN:-gneubig@login4.babel.cs.cmu.edu}
+LOGIN=${OH_BABEL_LOGIN:-babel}
 if [[ ${OH_AGENT_CANVAS_REPO_DIR+x} ]]; then
   REMOTE_REPO_DIR=$OH_AGENT_CANVAS_REPO_DIR
   REMOTE_REPO_DIR_EXPLICIT=1
@@ -177,7 +177,7 @@ KEEP_JOB=0
 
 SBATCH_ARGS=()
 SBATCH_GRES_EXPLICIT=0
-SSH_OPTS=(-T -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
+SSH_OPTS=(-T -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
 
 while (($#)); do
   case "$1" in
