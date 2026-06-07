@@ -62,6 +62,20 @@
                 "agent-canvas",
                 "openhands"
             ]
+        },
+        {
+            "name": "tunnel-to-orchard",
+            "source": "./tunnel-to-orchard",
+            "description": "Create Agent Canvas login-node tunnels to Orchard through Google Cloud IAP",
+            "category": "workflow",
+            "keywords": [
+                "orchard",
+                "gcloud",
+                "iap",
+                "tunnel",
+                "agent-canvas",
+                "openhands"
+            ]
         }
     ],
     "dependencies": {
