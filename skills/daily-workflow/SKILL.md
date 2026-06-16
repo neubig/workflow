@@ -19,6 +19,7 @@ Use this skill when Graham asks for the daily workflow. The goal is to make the 
 - Check Slack only when a Slack connector/tool is available. If unavailable, report that Slack intake could not be checked.
 - Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to Graham.
 - Omit blocked Linear issues from the status tables and interactive walkthrough. Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not mention blocked issues unless Graham explicitly asks for blocked work.
+- When sharing the next workflow step, include the relevant Linear or GitHub link if there is one.
 - Do not start implementation work during this workflow unless Graham explicitly asks for it after the status pass.
 
 ## Step 1: Check PRs Waiting For Graham's Review
@@ -96,7 +97,18 @@ For every candidate, propose:
 
 Ask Graham to confirm before creating any Slack-derived GitHub issue or Linear ticket.
 
-## Step 6: Walk Linear Tickets by Priority
+## Step 6: Prioritize Unprioritized Linear Tickets
+
+Before walking the priority queue, fetch Graham's incomplete, unblocked assigned Linear tickets with priority `0 No priority`.
+
+When active unprioritized tickets exist:
+1. Exclude completed, canceled, duplicate, archived, and blocked tickets.
+2. Inspect linked GitHub PRs/issues when available so merged/stale trackers can be closed or marked duplicate instead of prioritized.
+3. Suggest priorities for all active unprioritized tickets at once, grouped as `High`, `Medium`, `Low`, and `Close/Duplicate`.
+4. Base the recommendation on whether the ticket blocks other roadmap work or other people, has an explicit deadline or SLA risk, affects a core offering versus auxiliary polish, is customer/admin/security sensitive, or is only a tracker/cleanup item.
+5. Ask Graham for corrections before mutating Linear. If Graham approves, apply the priority/state changes and then continue the workflow.
+
+## Step 7: Walk Linear Tickets by Priority
 
 Fetch Graham's incomplete, unblocked assigned Linear tickets and sort by priority:
 `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`.
