@@ -1,6 +1,6 @@
 ---
 name: daily-workflow
-description: Graham's human-in-the-loop daily workflow for aligning open GitHub PRs, GitHub issues, Linear tickets, and recent Slack requests before choosing development work.
+description: Graham's human-in-the-loop daily workflow for checking PRs awaiting review, then aligning open GitHub PRs, GitHub issues, Linear tickets, and recent Slack requests before choosing development work.
 triggers:
 - daily workflow
 - my workflow
@@ -9,7 +9,7 @@ triggers:
 
 # Graham's Daily Workflow
 
-Use this skill when Graham asks for the daily workflow. The goal is to make the work queue coherent before doing implementation work: every open PR should have a GitHub issue, every relevant issue should be assigned to Graham and tracked in Linear, Slack-derived work should be proposed for confirmation, and Linear tickets should be reviewed in priority order with concrete readiness status.
+Use this skill when Graham asks for the daily workflow. The goal is to make the work queue coherent before doing implementation work: PRs waiting for Graham's review should be checked first, every open PR should have a GitHub issue, every relevant issue should be assigned to Graham and tracked in Linear, Slack-derived work should be proposed for confirmation, and Linear tickets should be reviewed in priority order with concrete readiness status.
 
 ## Operating Rules
 
@@ -21,7 +21,23 @@ Use this skill when Graham asks for the daily workflow. The goal is to make the 
 - Omit blocked Linear issues from the status tables and interactive walkthrough. Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not mention blocked issues unless Graham explicitly asks for blocked work.
 - Do not start implementation work during this workflow unless Graham explicitly asks for it after the status pass.
 
-## Step 1: Inventory Open PRs and Their Issues
+## Step 1: Check PRs Waiting For Graham's Review
+
+Find open PRs where Graham has been requested as a reviewer:
+
+```bash
+gh search prs --review-requested=@me --state=open --json repository,number,title,url,isDraft,author,updatedAt
+```
+
+If `@me` is unavailable in the current environment, use `--review-requested=neubig`. If GitHub search does not support the review-requested query, use GitHub tools or GraphQL to find open PRs with `neubig` or Graham's teams in the requested reviewer list.
+
+For each PR:
+1. Read the PR summary, changed files, CI status, review decision, and recent discussion. Use `gh pr view` or GitHub tools for details that `gh search prs` does not return.
+2. Classify it as `Ready for Graham review`, `Draft/not ready`, `Blocked by CI`, `Needs author response`, or `Already handled/stale request`.
+3. Put PRs that are genuinely ready for Graham review before other workflow items.
+4. Do not perform the review or approve/request changes unless Graham explicitly asks for that action.
+
+## Step 2: Inventory Open PRs and Their Issues
 
 Find all open PRs authored by `neubig`:
 
@@ -41,14 +57,14 @@ If a PR has no associated issue:
 
 Only create a GitHub issue without asking Graham when the PR itself provides unambiguous code context. If the context is unclear, propose the issue title/body first.
 
-## Step 2: Ensure GitHub Issues Are Assigned
+## Step 3: Ensure GitHub Issues Are Assigned
 
 For every issue associated with Graham's open PRs:
 1. Check the issue assignees.
 2. Assign the issue to `neubig` if Graham is not already assigned and the repository permits it.
 3. If assignment fails because of permissions or repository rules, include that issue in the final action list.
 
-## Step 3: Ensure Linear Tracking
+## Step 4: Ensure Linear Tracking
 
 For every associated GitHub issue:
 1. Check whether it has been ingested into Linear.
@@ -58,7 +74,7 @@ For every associated GitHub issue:
 
 If Linear tools are unavailable, continue the rest of the workflow and list the exact Linear checks that could not be completed.
 
-## Step 4: Slack Intake
+## Step 5: Slack Intake
 
 Check recent Slack messages directed to Graham and recent threads where Graham participated. Look for requests that imply follow-up work.
 
@@ -80,7 +96,7 @@ For every candidate, propose:
 
 Ask Graham to confirm before creating any Slack-derived GitHub issue or Linear ticket.
 
-## Step 5: Walk Linear Tickets by Priority
+## Step 6: Walk Linear Tickets by Priority
 
 Fetch Graham's incomplete, unblocked assigned Linear tickets and sort by priority:
 `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`.
@@ -108,6 +124,11 @@ After providing the final summary tables, continue into an interactive Linear ti
 End with these sections:
 
 ```markdown
+## PRs Awaiting Graham Review
+
+| PR | Author | CI | Review Status | Action |
+|----|--------|----|---------------|--------|
+
 ## PR Issue Alignment
 
 | PR | Associated Issue | Issue Assigned To Graham | Linear Tracked | Action |
