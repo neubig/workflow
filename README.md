@@ -13,7 +13,6 @@ This repository contains OpenHands skills for managing daily development workflo
 | [sub-agent-delegation](./skills/sub-agent-delegation/SKILL.md) | Delegate substantial tasks to sub-agents via DelegateTool or Cloud API | `delegate task`, `sub-agent`, `spawn agent`, `parallel task` |
 | [tunnel-to-babel](./skills/tunnel-to-babel/SKILL.md) | Start Agent Canvas backend tunnels on Babel Slurm with debug CPU or general L40S GPU jobs | `tunnel to babel`, `babel tunnel`, `slurm tunnel` |
 | [openhands-slides](./skills/openhands-slides/SKILL.md) | Create branded reveal.js slide presentations with OpenHands styling and PDF export | `create slides`, `presentation`, `slide deck`, `slides` |
-| [webflow](./skills/webflow/SKILL.md) | Interact with Webflow sites, CMS collections, pages, assets, and custom code | `webflow`, `webflow api`, `webflow cms`, `webflow site` |
 
 ## Marketplaces
 
@@ -35,7 +34,6 @@ Depending on which skills you use, you may need the following environment variab
 - `GITHUB_TOKEN` - GitHub API, CLI, and workflow access for `daily-workflow`, external `iterate`, and `eval-with-ci`
 - Google Sheets access or an exported CSV/XLSX - source application data and optional new-sheet upload for `evaluate-flame-apps`
 - `OPENHANDS_CLOUD_API_KEY` - OpenHands Cloud API access for the remote delegation path in `sub-agent-delegation`
-- `WEBFLOW_API_KEY` - Webflow Data API access for `webflow`
 
 ## User Configuration
 

@@ -91,18 +91,6 @@
             ]
         },
         {
-            "name": "webflow",
-            "source": "./webflow",
-            "description": "Interact with Webflow sites, CMS collections, and content using the Webflow Data API v2. Manage pages, assets, and custom code programmatically.",
-            "category": "integration",
-            "keywords": [
-                "webflow",
-                "cms",
-                "website",
-                "api"
-            ]
-        },
-        {
             "name": "add-skill",
             "source": "OpenHands/extensions:skills/add-skill",
             "description": "Add (import) an OpenHands skill from a GitHub repository into the current workspace.",
