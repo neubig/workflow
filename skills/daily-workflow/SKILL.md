@@ -99,7 +99,7 @@ Ask Graham to confirm before creating any Slack-derived GitHub issue or Linear t
 
 ## Step 6: Prioritize Unprioritized Linear Tickets
 
-Before walking the priority queue, fetch Graham's incomplete, unblocked assigned Linear tickets with priority `0 No priority`.
+Before walking the priority queue, fetch Graham's incomplete, unblocked assigned Linear tickets with priority `0 No priority`. Use the query method described in [Fetching Incomplete Linear Tickets](#fetching-incomplete-linear-tickets) to exclude completed, canceled, and duplicate tickets at the API level rather than paginating through all assigned issues.
 
 When active unprioritized tickets exist:
 1. Exclude completed, canceled, duplicate, archived, and blocked tickets.
@@ -114,6 +114,28 @@ Fetch Graham's incomplete, unblocked assigned Linear tickets and sort by priorit
 `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`.
 
 When using Linear MCP tools, do not rely on unsupported shorthand filters such as `state=uncompleted`. Either request Graham's assigned issues and filter locally, or use an explicit state/type filter that excludes completed, canceled, duplicate, and blocked work. Also exclude tickets with a `Blocked` label or an active blocker relation before building the table or starting the walkthrough.
+
+### Fetching Incomplete Linear Tickets
+
+The Linear MCP `list_issues` tool does not support excluding state types (e.g., "not completed"). To avoid paginating through hundreds of completed/canceled issues, use the Linear GraphQL API directly with a `nin` (not-in) filter on `state.type`:
+
+```bash
+curl -s -X POST https://api.linear.app/graphql \
+  -H "Content-Type: application/json" \
+  -H "Authorization: $LINEAR_API_KEY" \
+  -d '{
+    "query": "query { viewer { assignedIssues(first: 250, filter: { state: { type: { nin: [\"completed\", \"canceled\", \"duplicate\"] } } }) { nodes { id identifier title priority priorityLabel state { name type } labels { nodes { name } } url createdAt updatedAt dueDate } } } }"
+  }' | jq '.data.viewer.assignedIssues.nodes'
+```
+
+This returns only incomplete tickets (backlog, unstarted, started, and triage states). After receiving the results, additionally filter out:
+- Tickets with a `Blocked` label
+- Tickets with an active blocker relation (check `blockedBy` if available)
+- Archived tickets
+
+If `LINEAR_API_KEY` is not set, fall back to the MCP `list_issues` tool with `assignee=me` and filter locally, paginating through all results. This is less efficient but functional.
+
+If neither the GraphQL API nor MCP tools are available, report that Linear issues could not be fetched and list the exact access needed.
 
 For each ticket, report:
 1. **Open PR?** Link the PR if one exists. If none exists, say `No`.
