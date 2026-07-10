@@ -16,6 +16,7 @@ Use this skill when Graham asks for the daily workflow. The goal is to make the 
 - Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to Graham.
 - Omit blocked Linear issues from the status tables and interactive walkthrough. Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not mention blocked issues unless Graham explicitly asks for blocked work.
 - When sharing the next workflow step, include the relevant Linear or GitHub link if there is one.
+- Ask Graham to make exactly one decision at a time. Provide the context and links for only the highest-priority current decision, ask one concrete question, and stop. Do not bundle approvals, preview the next decision, or add an "after that" queue.
 - Do not start PR remediation until the initial status report has been shown to Graham. After that report, remediation of eligible Graham-authored PRs is part of the daily workflow and does not require a second request. Keep unrelated implementation work human-in-the-loop.
 
 ## Step 1: Check PRs Waiting For Graham's Review
@@ -91,7 +92,7 @@ For every candidate, propose:
 - assignee
 - reason it should be tracked
 
-Ask Graham to confirm before creating any Slack-derived GitHub issue or Linear ticket.
+Ask Graham to confirm before creating any Slack-derived GitHub issue or Linear ticket. If several proposals exist, ask about only the highest-priority proposal and wait for the answer before presenting another.
 
 ## Step 6: Prioritize Unprioritized Linear Tickets
 
@@ -100,9 +101,9 @@ Before walking the priority queue, fetch Graham's incomplete, unblocked assigned
 When active unprioritized tickets exist:
 1. Exclude completed, canceled, duplicate, archived, and blocked tickets.
 2. Inspect linked GitHub PRs/issues when available so merged/stale trackers can be closed or marked duplicate instead of prioritized.
-3. Suggest priorities for all active unprioritized tickets at once, grouped as `High`, `Medium`, `Low`, and `Close/Duplicate`.
-4. Base the recommendation on whether the ticket blocks other roadmap work or other people, has an explicit deadline or SLA risk, affects a core offering versus auxiliary polish, is customer/admin/security sensitive, or is only a tracker/cleanup item.
-5. Ask Graham for corrections before mutating Linear. If Graham approves, apply the priority/state changes and then continue the workflow.
+3. Rank the active unprioritized tickets internally, but do not ask for batch approval or present several priority decisions at once.
+4. Present only the highest-priority ticket, recommend `High`, `Medium`, `Low`, or `Close/Duplicate`, and explain whether it blocks other work or people, has deadline or SLA risk, affects a core offering, is customer/admin/security sensitive, or is only cleanup.
+5. Ask Graham to approve or correct that single recommendation. Apply only that ticket's approved priority/state change, then wait for Graham's response before presenting another decision.
 
 ## Step 7: Walk Linear Tickets by Priority
 
@@ -176,10 +177,13 @@ Walk the sorted, unblocked Linear tickets one by one, starting with the highest-
 3. Do not start implementation, mutate Linear, close tickets, or skip ahead unless Graham explicitly chooses that action.
 4. If Graham asks to skip a ticket, move to the next ticket in priority order and keep the skipped ticket in the final action list.
 5. If Linear access is unavailable, do not attempt the interactive walkthrough; instead report the missing Linear access needed to fetch assigned tickets.
+6. Do not preview or ask about the next ticket in the same response. End after the single current decision question.
 
 ## Initial Status Output
 
 Before Step 8 changes PR code, show these sections:
+
+The status tables may summarize multiple items, but `Action Items Requiring Graham` must contain exactly one row: the highest-priority decision currently requiring Graham. Do not include a second decision elsewhere in the same response.
 
 ```markdown
 ## PRs Awaiting Graham Review
