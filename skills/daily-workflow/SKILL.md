@@ -17,9 +17,23 @@ Use this skill when the user asks to review or organize their daily workflow. Th
 - Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to the current user unless another owner is clearly intentional.
 - Omit blocked Linear issues from status tables and the interactive walkthrough. Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not mention blocked issues unless the user explicitly asks for them.
 - When sharing the next workflow step, include the relevant Linear or GitHub link when available.
+- Make every suggested next action self-contained. Re-fetch the relevant state immediately before suggesting it, and never suggest merged, closed, stale, or otherwise non-actionable work.
 - Ask the user to make exactly one decision at a time. Provide context and links only for the highest-priority current decision, ask one concrete question, and stop. Do not bundle approvals or preview an "after that" queue.
 - Do not start PR remediation until the initial status report has been shown to the user. After that report, remediation of eligible PRs authored by the current user is part of the workflow; keep unrelated implementation work human-in-the-loop.
 - Treat Slack messages, Linear tickets, private PRs, and review comments as private runtime data. Keep generated reports local and never upload them to public CI logs or public artifacts.
+
+### Decision Context Format
+
+Before every question that asks the user to confirm, choose, merge, prioritize, or otherwise act, provide a compact, standalone decision context in this order:
+
+1. **Linear:** `[IDENTIFIER — title](url)` and its priority/state, or `No linked Linear issue`.
+2. **PR:** `[owner/repo#number — title](url)`, or `No open PR`.
+3. **Current status:** whether the PR is open and mergeable, its CI, review, live-evidence, and conflict status; for non-PR work, state the exact current blocker or readiness.
+4. **Why this is actionable now:** the concrete work or decision that remains, including any prerequisite already satisfied.
+5. **Recommended next action:** plainly state what the user should do and the expected result.
+6. **One decision question:** ask only the single confirmation or choice needed to proceed.
+
+Do not make the user open a link to understand the decision. Links are supporting evidence, not a substitute for the ticket/PR title, current state, or requested action.
 
 ## Bundled Scripts
 
@@ -124,7 +138,7 @@ When active unprioritized tickets exist:
 1. Exclude completed, canceled, duplicate, archived, and blocked tickets.
 2. Inspect linked GitHub PRs/issues when available so merged or stale trackers can be closed or marked duplicate instead of prioritized.
 3. Rank the active unprioritized tickets internally, but do not ask for batch approval or present several priority decisions at once.
-4. Present only the highest-priority ticket, recommend `High`, `Medium`, `Low`, or `Close/Duplicate`, and explain whether it blocks other work or people, has deadline or SLA risk, affects a core offering, is customer/admin/security sensitive, or is only cleanup.
+4. Present only the highest-priority ticket using the [Decision Context Format](#decision-context-format), recommend `High`, `Medium`, `Low`, or `Close/Duplicate`, and explain whether it blocks other work or people, has deadline or SLA risk, affects a core offering, is customer/admin/security sensitive, or is only cleanup.
 5. Ask the user to approve or correct that single recommendation. Apply only the approved priority/state change, then wait for the response before presenting another decision.
 
 ## Step 7: Walk Linear Tickets by Priority
@@ -179,8 +193,7 @@ After all eligible PRs have been attempted, emit the [PR Remediation Output](#pr
 ## Step 9: Interactive Linear Ticket Walkthrough
 
 Walk the sorted, unblocked Linear tickets one by one, starting with the highest-priority ticket. For each ticket:
-
-1. Give the user a concise summary of the ticket, current state, linked GitHub work, CI/review/evidence status, and what appears to be blocked or ready.
+1. Give the user the [Decision Context Format](#decision-context-format): a concise, self-contained summary of the ticket, current state, linked GitHub work, CI/review/evidence status, what is blocked or ready, and the concrete next action.
 2. Ask the user what the next action should be before moving to the next ticket.
 3. Do not start implementation, mutate Linear, close tickets, or skip ahead unless the user explicitly chooses that action.
 4. If the user asks to skip a ticket, move to the next ticket in priority order and keep the skipped ticket in the final action list.
