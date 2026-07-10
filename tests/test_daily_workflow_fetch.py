@@ -4,7 +4,13 @@ import unittest
 from unittest import mock
 
 
-MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "daily-workflow-fetch.py"
+MODULE_PATH = (
+    pathlib.Path(__file__).resolve().parents[1]
+    / "skills"
+    / "daily-workflow"
+    / "scripts"
+    / "daily-workflow-fetch.py"
+)
 SPEC = importlib.util.spec_from_file_location("daily_workflow_fetch", MODULE_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader

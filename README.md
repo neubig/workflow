@@ -13,6 +13,8 @@ Reusable OpenHands skills for daily development workflows and related integratio
 | [openhands-slides](./skills/openhands-slides/SKILL.md) | Create branded reveal.js presentations and export them to PDF | `create slides`, `presentation`, `slide deck`, `slides` |
 | [update-todos](./skills/update-todos/SKILL.md) | Reconcile Slack, GitHub, and Linear work items | `update todos`, `reconcile work items`, `sync linear github slack` |
 
+The daily-workflow skill packages its local helper scripts in [`skills/daily-workflow/scripts`](./skills/daily-workflow/scripts/), so they travel with the skill when it is installed.
+
 ## Marketplace
 
 [default.json](./marketplaces/default.json) lists the public local skills alongside public OpenHands extensions. Configure your OpenHands marketplace path to this repository or that manifest.

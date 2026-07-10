@@ -21,6 +21,13 @@ Use this skill when the user asks to review or organize their daily workflow. Th
 - Do not start PR remediation until the initial status report has been shown to the user. After that report, remediation of eligible PRs authored by the current user is part of the workflow; keep unrelated implementation work human-in-the-loop.
 - Treat Slack messages, Linear tickets, private PRs, and review comments as private runtime data. Keep generated reports local and never upload them to public CI logs or public artifacts.
 
+## Bundled Scripts
+
+This skill packages its executable helpers in `scripts/`. Run them relative to the skill root so the skill remains portable when installed independently.
+
+- `scripts/daily-workflow-fetch.py` collects the current user's Linear and GitHub work into a local Markdown or JSON report. It requires an authenticated `gh` CLI for GitHub access and optionally uses `LINEAR_API_KEY` for its local Linear CLI mode. Keep its output local.
+- `scripts/check_ready_prs.py` checks the current user's open PRs against the readiness and live-evidence criteria used in this workflow. It requires `gh` authentication.
+
 ## Step 1: Check PRs Awaiting the User's Review
 
 Find open PRs where the current GitHub user has been requested as a reviewer:
@@ -146,6 +153,13 @@ Then revisit every open PR authored by the current user from Step 2. A PR is eli
 2. One or more required CI checks are failing.
 3. An actionable review thread remains unresolved. Use thread-level GitHub data, not only flat comments, so resolved and outdated threads are distinguished correctly.
 4. The PR lacks genuine live-code evidence. Unit tests alone do not count; exempt only work that is truly content-only.
+
+Use the bundled readiness helper as an additional inventory before remediation when `gh` is available:
+
+```bash
+github_user="$(gh api user --jq .login)"
+python3 scripts/check_ready_prs.py --user "$github_user" --summary
+```
 
 For every eligible PR:
 
