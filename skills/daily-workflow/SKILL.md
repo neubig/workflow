@@ -16,8 +16,22 @@ Use this skill when Graham asks for the daily workflow. The goal is to make the 
 - Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to Graham.
 - Omit blocked Linear issues from the status tables and interactive walkthrough. Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not mention blocked issues unless Graham explicitly asks for blocked work.
 - When sharing the next workflow step, include the relevant Linear or GitHub link if there is one.
+- Make every suggested next action self-contained. Re-fetch the relevant state immediately before suggesting it, and never suggest merged, closed, stale, or otherwise non-actionable work.
 - Ask Graham to make exactly one decision at a time. Provide the context and links for only the highest-priority current decision, ask one concrete question, and stop. Do not bundle approvals, preview the next decision, or add an "after that" queue.
 - Do not start PR remediation until the initial status report has been shown to Graham. After that report, remediation of eligible Graham-authored PRs is part of the daily workflow and does not require a second request. Keep unrelated implementation work human-in-the-loop.
+
+### Decision Context Format
+
+Before every question that asks Graham to confirm, choose, merge, prioritize, or otherwise act, provide a compact, standalone decision context in this order:
+
+1. **Linear:** `[IDENTIFIER — title](url)` and its priority/state, or `No linked Linear issue`.
+2. **PR:** `[owner/repo#number — title](url)`, or `No open PR`.
+3. **Current status:** whether the PR is open and mergeable, its CI, review, live-evidence, and conflict status; for non-PR work, state the exact current blocker or readiness.
+4. **Why this is actionable now:** the concrete work or decision that remains, including any prerequisite already satisfied.
+5. **Recommended next action:** plainly state what Graham should do and the expected result.
+6. **One decision question:** ask only the single confirmation or choice needed to proceed.
+
+Do not make Graham open a link to understand the decision. Links are supporting evidence, not a substitute for the ticket/PR title, current state, or requested action.
 
 ## Step 1: Check PRs Waiting For Graham's Review
 
@@ -102,7 +116,7 @@ When active unprioritized tickets exist:
 1. Exclude completed, canceled, duplicate, archived, and blocked tickets.
 2. Inspect linked GitHub PRs/issues when available so merged/stale trackers can be closed or marked duplicate instead of prioritized.
 3. Rank the active unprioritized tickets internally, but do not ask for batch approval or present several priority decisions at once.
-4. Present only the highest-priority ticket, recommend `High`, `Medium`, `Low`, or `Close/Duplicate`, and explain whether it blocks other work or people, has deadline or SLA risk, affects a core offering, is customer/admin/security sensitive, or is only cleanup.
+4. Present only the highest-priority ticket using the [Decision Context Format](#decision-context-format), recommend `High`, `Medium`, `Low`, or `Close/Duplicate`, and explain whether it blocks other work or people, has deadline or SLA risk, affects a core offering, is customer/admin/security sensitive, or is only cleanup.
 5. Ask Graham to approve or correct that single recommendation. Apply only that ticket's approved priority/state change, then wait for Graham's response before presenting another decision.
 
 ## Step 7: Walk Linear Tickets by Priority
@@ -172,7 +186,7 @@ After all eligible PRs have been attempted, emit the [PR Remediation Output](#pr
 ## Step 9: Interactive Linear Ticket Walkthrough
 
 Walk the sorted, unblocked Linear tickets one by one, starting with the highest-priority ticket. For each ticket:
-1. Give Graham a concise summary of the ticket, current state, linked GitHub work, CI/review/evidence status, and what appears to be blocked or ready.
+1. Give Graham the [Decision Context Format](#decision-context-format): a concise, self-contained summary of the ticket, current state, linked GitHub work, CI/review/evidence status, what is blocked or ready, and the concrete next action.
 2. Ask Graham what the next action should be before moving to the next ticket.
 3. Do not start implementation, mutate Linear, close tickets, or skip ahead unless Graham explicitly chooses that action.
 4. If Graham asks to skip a ticket, move to the next ticket in priority order and keep the skipped ticket in the final action list.
