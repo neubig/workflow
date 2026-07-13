@@ -82,6 +82,8 @@ For each PR:
 
 If a PR has no associated issue:
 
+First determine whether the PR exists exclusively as housekeeping for another PR. If so, do not open a separate issue: reference the upstream PR instead and treat that reference as sufficient tracking. For example, an infrastructure PR that only deploys a feature branch should reference that feature PR. Otherwise:
+
 1. Search for related issues in the same repository using title keywords, branch names, and PR body terms.
 2. If a related issue exists, associate it with the PR by adding a clear issue link or closing keyword to the PR body, depending on whether the PR should close the issue.
 3. If no related issue exists, create a concise GitHub issue in the same repository, assign it to the current user, and associate the PR with it.
