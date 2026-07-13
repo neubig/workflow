@@ -100,6 +100,8 @@ For every issue associated with the current user's open PRs:
 
 ## Step 4: Ensure Linear Tracking
 
+Before creating, ingesting, or associating a Linear issue, verify that the target Linear organization matches the GitHub repository owner. Do not add issues from personal repositories to a company Linear organization, and do not add issues from a repository owned by one organization to another organization's Linear workspace. If the correct organization cannot be determined or is unavailable, ask the user rather than creating or moving the issue.
+
 For every associated GitHub issue:
 
 1. Check whether it has been ingested into Linear.
