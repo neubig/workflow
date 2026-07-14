@@ -24,6 +24,20 @@
       ]
     },
     {
+      "name": "sprint-planning",
+      "source": "./sprint-planning",
+      "description": "Facilitate collaborative, human-in-the-loop sprint and Linear cycle planning",
+      "category": "workflow",
+      "keywords": [
+        "sprint",
+        "cycle",
+        "planning",
+        "linear",
+        "capacity",
+        "backlog"
+      ]
+    },
+    {
       "name": "eval-with-ci",
       "source": "./eval-with-ci",
       "description": "Run evaluations through the OpenHands/software-agent-sdk GitHub Actions CI workflow",
