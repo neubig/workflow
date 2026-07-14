@@ -14,6 +14,7 @@ Use this skill when the user asks to review or organize their daily workflow. Th
 - Prefer Linear MCP tools for Linear reads and writes. If unavailable, report the access needed; do not document raw Linear API token workarounds in this workflow.
 - Prefer GitHub tools or `gh` for GitHub reads and writes.
 - Check Slack only when a Slack connector/tool is available. If unavailable, report that Slack intake could not be checked.
+- When multiple Linear or Slack connections are available, examine all of them and consider their results together unless the user specifies otherwise; do not treat one connection as the complete work queue by default.
 - Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to the current user unless another owner is clearly intentional.
 - If a priority is set, the issue should not be in `triage`; set it to `todo` if no PR is open, `in progress` if a draft PR is open or a PR has been reviewed but no response to the review has been posted, and `under review` if the PR is ready but no review has been submitted. For issues in `under review`, suggest potential reviewers if none are assigned, but do not request a review unless asked to.
 - Omit blocked Linear issues from status tables and the interactive walkthrough. Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not mention blocked issues unless the user explicitly asks for them.
