@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cycle Planning"
+  short_description: "Facilitate collaborative cycle planning"
+  default_prompt: "Use $cycle-planning to facilitate a collaborative, human-in-the-loop cycle-planning session."

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Sprint Planning"
-  short_description: "Facilitate collaborative sprint planning"
-  default_prompt: "Use $sprint-planning to facilitate a collaborative, human-in-the-loop sprint planning session."

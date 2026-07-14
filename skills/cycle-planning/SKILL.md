@@ -1,21 +1,24 @@
 ---
-name: sprint-planning
-description: Facilitate collaborative, human-in-the-loop sprint or Linear cycle planning. Use when the user asks to plan a sprint/cycle, choose sprint scope, set a Sprint Goal, review capacity or carryover, sequence release work into a cycle, or work through a planning ticket surfaced by daily-workflow.
+name: cycle-planning
+description: Facilitate collaborative, human-in-the-loop Linear cycle or sprint planning. Use when the user asks to plan a cycle or sprint, choose cycle scope, set outcome themes, review capacity or carryover, sequence release work into a cycle, or work through a planning ticket surfaced by daily-workflow.
 ---
 
-# Sprint Planning
+# Cycle Planning
 
 Facilitate the planning conversation. Gather evidence and make recommendations, but leave goals, scope, ownership, estimates, and commitments to the user and team.
 
 ## Operating Rules
 
 - Treat every generated plan as a proposal until the user explicitly approves it.
-- Ask for one decision at a time. Do not silently turn a label, due date, roadmap, or issue description into an approved sprint plan.
+- Ask for one decision at a time. Do not silently turn a label, due date, roadmap, or issue description into an approved cycle plan.
 - Do not create issues or change cycles, states, priorities, estimates, assignees, or due dates until the user approves the exact change.
+- Establish which system owns issue content, planning metadata, dependencies, and dates before writing anything. Do not mix metadata across systems when one is a synchronized view of another.
+- Agree on the team's deadline policy. A planning `needed by` constraint is not automatically an issue due date.
 - If planning starts from a Linear planning ticket, keep it `In Progress` throughout the conversation. Mark it `Done` only after the user confirms the final plan.
 - Let the people doing the work assess feasibility, size the work, and accept ownership. Never fill a person's calendar or assign work merely because they appear available.
+- When the tracker or team requires single ownership, record exactly one accountable assignee. Represent pairing and collaborators separately.
 - Describe selected backlog items as a **forecast**. The team commits to the agreed cycle themes and quality bar, not an immutable list of items.
-- Keep release roadmaps separate from sprint scope. A release date is an input; a Linear cycle is a time box, not a release.
+- Keep release roadmaps separate from cycle scope. A release date is an input; a Linear cycle is a time box, not a release.
 - Count existing work in progress and unfinished carryover before adding new work.
 - Resolve the required product surface before evaluating a capability. Evidence from a CLI, API, SDK, mock, or different frontend does not prove that the required user experience works.
 - Keep private ticket, customer, personnel, and capacity details in authorized tools and local output.
@@ -27,7 +30,10 @@ Facilitate the planning conversation. Gather evidence and make recommendations, 
 Resolve and re-fetch:
 
 - team and participants
-- sprint/cycle dates and cadence
+- cycle/sprint dates and cadence
+- authoritative systems for issue content, planning metadata, and dependency relations, including synchronization direction and known non-synced fields
+- team and issue hierarchy, including which items are eligible for the cycle
+- whether child items receive due dates and how the team distinguishes selected, queued, and active work
 - required product surface and deployment environment
 - Product Goal, release milestones, deadlines, and non-goals
 - current work in progress and likely carryover
@@ -39,7 +45,7 @@ Do not assume missing capacity or stakeholder information. State what is unknown
 
 ### 2. Agree on Why: Draft the Cycle Themes
 
-Start with value, not a list of tickets. Draft a small, coherent set of outcome-oriented themes. Do not force unrelated OSS outcomes into one Sprint Goal. For each theme capture:
+Start with value, not a list of tickets. Draft a small, coherent set of outcome-oriented themes. Do not force unrelated outcomes into one cycle theme. For each theme capture:
 
 - the user or stakeholder outcome
 - why it matters this cycle
@@ -62,13 +68,15 @@ Order the resulting statements by contribution to the confirmed themes. For each
 
 - a specific, testable `I can ...` outcome and its current-behavior classification
 - acceptance criteria and the applicable Definition of Done
-- a small enough vertical slice to finish inside the sprint
+- a small enough vertical slice to finish inside the cycle
 - estimate or comparable sizing evidence from the people doing the work
 - dependencies, blockers, external approvals, and required collaborators
 - validation or live-evidence expectations
 - whether the likely owner has confirmed availability
 
-Return vague, unverified, oversized, or blocked work to refinement unless resolving the uncertainty or blocker is part of a confirmed theme. Do not create every discovered gap immediately; propose follow-up work one decision at a time.
+Search for existing issues and active implementation before proposing a new item. Reuse an authoritative item when it represents the same work. Split outcomes that modify different repositories or independently releasable artifacts into tracker items owned by those artifacts, connected beneath a shared outcome.
+
+Return vague, unverified, oversized, duplicate, or blocked work to refinement unless resolving the uncertainty or blocker is part of a confirmed theme. Do not create every discovered gap immediately; propose follow-up work one decision at a time.
 
 ### 4. Build a Capacity-Based Forecast
 
@@ -92,6 +100,8 @@ Separate the proposed backlog into:
 2. **Stretch:** ordered work that may be pulled only if capacity appears.
 3. **Not selected:** relevant work excluded with a short reason.
 
+Within the selected forecast, distinguish work that starts now from work queued behind a dependency or later availability window. Cycle membership does not imply immediate activation.
+
 Show totals against the capacity forecast, then ask the user to confirm or adjust the proposed scope.
 
 ### 5. Build the Release Dependency and Topic Plan
@@ -104,7 +114,9 @@ For each release in or immediately after the cycle, work backward from its accep
 4. documentation, examples, and other release artifacts that depend on that evidence
 5. final acceptance and contingency time
 
-Represent dependencies explicitly as predecessor-successor edges with an owner and needed-by date. A release is not covered when one of its dependencies finishes after the release date or lacks a confirmed owner.
+Represent dependencies explicitly as predecessor-successor edges with an owner and planning needed-by point. Do not write that point as an issue due date unless the approved deadline policy requires it. A release is not covered when one of its dependencies finishes after the release date or lacks a confirmed owner.
+
+If an approved availability, sequencing, or scope constraint leaves insufficient release buffer, preserve the constraint, mark the release at risk, and ask for a scope, date, or quality decision. Do not hide the conflict by inventing parallel work or child deadlines.
 
 Propose a small list of outcome-oriented topic lanes for each available person. For every lane show why it fits the person's recent demonstrated work, its availability window, dependencies, expected result, and release served. Keep ownership provisional until that person or the user confirms it.
 
@@ -112,7 +124,7 @@ Propose a small list of outcome-oriented topic lanes for each available person. 
 
 After scope is approved, facilitate a lightweight delivery plan. For each selected item record:
 
-- confirmed owner or pairing group
+- confirmed accountable owner, with pairing or collaborators recorded separately
 - first executable step
 - dependency or handoff
 - validation and Definition-of-Done check
@@ -140,28 +152,32 @@ Ask whether the team has enough confidence to start. If confidence is low, reduc
 
 Only after explicit final approval:
 
-1. Update the Linear cycle and selected issues.
-2. Apply confirmed owners, estimates, states, and due dates.
-3. Create only the follow-up issues the user approved.
-4. Record the cycle themes, capacity assumptions, forecast, stretch work, risks, and confidence decision on the planning ticket or agreed planning document.
-5. Re-fetch the updated state and show the user exactly what changed.
-6. Mark the planning ticket `Done` only if the user explicitly confirms planning is complete.
+1. Confirm write authorization and the approved source-of-truth contract before starting a batch.
+2. Normalize team ownership and parent hierarchy before setting cycle membership or dependency relations; tracker transfers may change visible identifiers.
+3. Reuse or create only the authoritative items the user approved, wait for configured synchronization, and reconcile duplicates before creating fallback tracker items.
+4. Apply only the approved owners, estimates, states, cycle membership, and dates. Leave unapproved fields unchanged.
+5. Write dependencies into the tracker's actual relation fields; a Markdown dependency list is not a substitute.
+6. Record cycle themes, forecast, queued work, capacity assumptions, risks, and the confidence decision on the agreed planning document.
+7. Re-fetch every changed item and verify counts, team, cycle, parent, accountable assignee, state, relation edges, dates, duplicates, and any changed identifiers.
+8. Show the user exactly what changed. Mark the planning ticket `Done` only after the user explicitly confirms planning is complete.
 
 ## Output Format
 
 Use this compact structure during the final confirmation:
 
 ```markdown
-## Proposed Sprint Plan
+## Proposed Cycle Plan
 
 **Cycle Themes:** ...
 **Dates:** ...
 **Capacity:** ...
+**Tracking Contract:** ...
+**Deadline Policy:** ...
 **Required Product Surface:** ...
 **Definition of Done:** ...
 
-| Theme | I can... | Current Behavior | Work Type | Estimate | Owner | Validation |
-|---|---|---|---|---:|---|---|
+| Theme | I can... | Current Behavior | Work Type | Phase | Estimate | Owner | Validation |
+|---|---|---|---|---|---:|---|---|
 
 ### Topic Lanes
 
