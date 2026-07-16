@@ -1,0 +1,131 @@
+name: PR Artifacts
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  cleanup-on-approval:
+    concurrency:
+      group: cleanup-pr-artifacts-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    if: github.event_name == 'pull_request_review' && github.event.review.state == 'approved'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check whether the PR comes from a fork
+        id: check-fork
+        env:
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
+        run: |
+          if [ "$PR_HEAD_REPO" != "$PR_BASE_REPO" ]; then
+            echo "is_fork=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Fork PR detected; .pr/ must be removed manually"
+          else
+            echo "is_fork=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Credentials are intentionally persisted here so the approved head branch
+      # can receive the cleanup commit.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        if: steps.check-fork.outputs.is_fork == 'false'
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Remove PR-only artifacts
+        id: remove
+        if: steps.check-fork.outputs.is_fork == 'false'
+        run: |
+          if [ -d ".pr" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git rm -rf .pr/
+            git commit -m "chore: remove PR-only artifacts [automated]"
+            git push
+            echo "removed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "removed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No .pr/ directory to remove"
+          fi
+
+      - name: Update the artifacts notice after cleanup
+        if: steps.check-fork.outputs.is_fork == 'false' && steps.remove.outputs.removed == 'true'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const marker = '<!-- pr-artifacts-notice -->';
+            const body = `${marker}
+            ✅ **PR artifacts cleaned up**
+
+            The temporary \`.pr/\` directory was removed after approval.
+            `;
+            const {data: comments} = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            }
+
+  check-pr-artifacts:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Check for a PR-only artifacts directory
+        id: check
+        run: |
+          if [ -d ".pr" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::.pr/ will be removed after approval for same-repository PRs"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post the artifacts notice once
+        if: steps.check.outputs.exists == 'true'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const marker = '<!-- pr-artifacts-notice -->';
+            const body = `${marker}
+            📁 **PR artifacts notice**
+
+            This PR contains temporary reviewer evidence in \`.pr/\`. The PR
+            description should link or embed every artifact. The directory will
+            be removed automatically after approval for same-repository PRs.
+
+            > Fork PRs must remove \`.pr/\` manually before merge.
+            `;
+            const {data: comments} = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            if (!comments.some((comment) => comment.body.includes(marker))) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
