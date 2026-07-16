@@ -22,6 +22,7 @@ Use this skill when the user asks to review or organize their daily workflow. Th
 - Make every suggested next action self-contained. Re-fetch the relevant state immediately before suggesting it, and never suggest merged, closed, stale, or otherwise non-actionable work.
 - Ask the user to make exactly one decision at a time. Provide context and links only for the highest-priority current decision, ask one concrete question, and stop. Do not bundle approvals or preview an "after that" queue.
 - Do not start PR remediation until the initial status report has been shown to the user. After that report, remediation of eligible PRs authored by the current user is part of the workflow; keep unrelated implementation work human-in-the-loop.
+- When the current item requests cycle or sprint planning, invoke `$cycle-planning`. Treat labels, dates, roadmap entries, and audits as planning inputs, not approved commitments; do not autonomously finalize the plan or close its planning ticket.
 - Treat Slack messages, Linear tickets, private PRs, and review comments as private runtime data. Keep generated reports local and never upload them to public CI logs or public artifacts.
 
 ### Decision Context Format
@@ -200,11 +201,12 @@ After all eligible PRs have been attempted, emit the [PR Remediation Output](#pr
 
 Walk the sorted, unblocked Linear tickets one by one, starting with the highest-priority ticket. For each ticket:
 1. Give the user the [Decision Context Format](#decision-context-format): a concise, self-contained summary of the ticket, current state, linked GitHub work, CI/review/evidence status, what is blocked or ready, and the concrete next action.
-2. Ask the user what the next action should be before moving to the next ticket.
-3. Do not start implementation, mutate Linear, close tickets, or skip ahead unless the user explicitly chooses that action.
-4. If the user asks to skip a ticket, move to the next ticket in priority order and keep the skipped ticket in the final action list.
-5. If Linear access is unavailable, do not attempt the interactive walkthrough; instead report the missing Linear access needed to fetch assigned tickets.
-6. Do not preview or ask about the next ticket in the same response. End after the single current decision question.
+2. If the ticket requests cycle or sprint planning, switch to `$cycle-planning` and facilitate the planning session. Resume this walkthrough only after the session is completed or the user explicitly defers it.
+3. Ask the user what the next action should be before moving to the next ticket.
+4. Do not start implementation, mutate Linear, close tickets, or skip ahead unless the user explicitly chooses that action.
+5. If the user asks to skip a ticket, move to the next ticket in priority order and keep the skipped ticket in the final action list.
+6. If Linear access is unavailable, do not attempt the interactive walkthrough; instead report the missing Linear access needed to fetch assigned tickets.
+7. Do not preview or ask about the next ticket in the same response. End after the single current decision question.
 
 ## Initial Status Output
 
