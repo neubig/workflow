@@ -11,7 +11,7 @@ demo**. It must not be described as a recording of real Slack content. The exact
 remaining blocker for a real-Slack recording is an OpenHands message/thread
 with documented public-disclosure approval; see [Privacy audit](PRIVACY-AUDIT.md).
 
-![Animated terminal replay](evidence/live-demo.svg)
+![Animated terminal replay](../../.pr/public-daily-workflow-example/live-demo.svg)
 
 ## Data boundary
 
@@ -82,7 +82,10 @@ Refresh the text transcript, asciinema cast, animated SVG, and checksums with:
 The generated artifacts are genuine executions of `demo.py` through its live
 GitHub-verification path. `--answers` echoes previously chosen human decisions
 so the recording is reproducible; omit it for a fresh human session. See
-[evidence/README.md](evidence/README.md) for what each artifact proves.
+[the PR-only evidence index](../../.pr/public-daily-workflow-example/README.md)
+for what each artifact proves. The `.pr/` directory is temporary reviewer
+context and is removed after approval; the source map, privacy audit, replay
+code, and reproduction instructions remain with the example.
 
 For a final real-Slack video, first replace the fixture only after obtaining the
 approval fields enforced by `demo.py`, update the source map, repeat the privacy

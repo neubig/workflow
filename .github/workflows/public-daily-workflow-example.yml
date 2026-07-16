@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "examples/public-daily-workflow-example/**"
+      - ".pr/public-daily-workflow-example/**"
       - "tests/test_public_daily_workflow_example.py"
       - ".github/workflows/public-daily-workflow-example.yml"
   push:
@@ -11,6 +12,7 @@ on:
       - main
     paths:
       - "examples/public-daily-workflow-example/**"
+      - ".pr/public-daily-workflow-example/**"
       - "tests/test_public_daily_workflow_example.py"
       - ".github/workflows/public-daily-workflow-example.yml"
 

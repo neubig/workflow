@@ -29,10 +29,10 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 rg -n \
   '(github_pat_|gh[opsu]_|xox[baprs]-|https://[^ ]*slack\.com/archives/|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})' \
   examples/public-daily-workflow-example/data/intake.json \
-  examples/public-daily-workflow-example/evidence/live-demo.cast \
-  examples/public-daily-workflow-example/evidence/live-demo.svg \
-  examples/public-daily-workflow-example/evidence/live-demo.txt
-(cd examples/public-daily-workflow-example && sha256sum -c evidence/SHA256SUMS)
+  .pr/public-daily-workflow-example/live-demo.cast \
+  .pr/public-daily-workflow-example/live-demo.svg \
+  .pr/public-daily-workflow-example/live-demo.txt
+(cd .pr/public-daily-workflow-example && sha256sum -c SHA256SUMS)
 ```
 
 The `rg` command must return no matches. A token name such as `GH_TOKEN` in the
@@ -48,7 +48,7 @@ The committed SVG and cast were inspected against this checklist:
   unrelated tabs are captured;
 - the human redirect and evidence rejection/recovery are visible;
 - the final frame says both `fixture-backed` and the real-Slack blocker; and
-- the checksums match `evidence/SHA256SUMS`.
+- the checksums match `.pr/public-daily-workflow-example/SHA256SUMS`.
 
 ## Exact remaining blocker
 

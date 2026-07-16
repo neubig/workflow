@@ -2,7 +2,8 @@
 set -euo pipefail
 
 example_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-evidence_dir="$example_dir/evidence"
+repo_root="$(git -C "$example_dir" rev-parse --show-toplevel)"
+evidence_dir="$repo_root/.pr/public-daily-workflow-example"
 command="python3 demo.py --verify-live --answers y,r,2,y,n,y --pace 0.12"
 
 cd "$example_dir"
@@ -37,10 +38,9 @@ sed -i \
   -e 's/[[:space:]]\+$//' \
   "$evidence_dir/live-demo.svg"
 
-sha256sum \
-  "$evidence_dir/live-demo.cast" \
-  "$evidence_dir/live-demo.svg" \
-  "$evidence_dir/live-demo.txt" \
-  | sed "s#$example_dir/##" > "$evidence_dir/SHA256SUMS"
+(
+  cd "$evidence_dir"
+  sha256sum live-demo.cast live-demo.svg live-demo.txt > SHA256SUMS
+)
 
 echo "Evidence refreshed in $evidence_dir"
