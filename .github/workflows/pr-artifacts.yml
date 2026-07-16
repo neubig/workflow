@@ -81,6 +81,9 @@ jobs:
             }
 
   check-pr-artifacts:
+    concurrency:
+      group: check-pr-artifacts-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
