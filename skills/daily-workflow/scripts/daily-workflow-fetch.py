@@ -48,6 +48,7 @@ class LinearTicket:
     state: str
     state_type: str
     url: str
+    due_date: str | None = None
     labels: list[str] = field(default_factory=list)
     external_links: list[ExternalLink] = field(default_factory=list)
 
@@ -260,6 +261,18 @@ class GitHubPR:
         return "\n".join(lines)
 
 
+def linear_ticket_sort_key(ticket: LinearTicket) -> tuple[int, int, str, str]:
+    """Sort by Linear priority, then put the earliest due date first."""
+    priority_rank = ticket.priority if ticket.priority > 0 else 99
+    due_date_rank = 0 if ticket.due_date else 1
+    return (
+        priority_rank,
+        due_date_rank,
+        ticket.due_date or "9999-12-31",
+        ticket.identifier,
+    )
+
+
 @dataclass
 class WorkflowChecklist:
     linear_tickets: list[LinearTicket] = field(default_factory=list)
@@ -292,13 +305,14 @@ class WorkflowChecklist:
                 return p if p > 0 else 99  # Move "No priority" (0) to end
 
             for priority in sorted(by_priority.keys(), key=priority_sort_key):
-                tickets = by_priority[priority]
+                tickets = sorted(by_priority[priority], key=linear_ticket_sort_key)
                 label = tickets[0].priority_label if tickets else "Unknown"
                 lines.append(f"### {label} Priority")
                 lines.append("")
                 for t in tickets:
                     lines.append(f"#### [{t.identifier}]({t.url}): {t.title}")
                     lines.append(f"**State**: {t.state}")
+                    lines.append(f"**Due**: {t.due_date or 'No due date'}")
                     lines.append("")
                     lines.append(t.get_action_instructions())
                     lines.append("")
@@ -357,6 +371,7 @@ class WorkflowChecklist:
                         "priority": t.priority,
                         "priority_label": t.priority_label,
                         "state": t.state,
+                        "due_date": t.due_date,
                         "url": t.url,
                         "is_actionable": t.is_actionable,
                         "is_manual_only": t.is_manual_only,
@@ -479,6 +494,7 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
                         description
                         priority
                         priorityLabel
+                        dueDate
                         url
                         state {{ name type }}
                         labels {{ nodes {{ name }} }}
@@ -549,6 +565,7 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
                     state=node["state"]["name"],
                     state_type=node["state"]["type"],
                     url=node["url"],
+                    due_date=node.get("dueDate"),
                     labels=labels,
                     external_links=external_links,
                 )
@@ -559,12 +576,7 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
 
     tickets = all_tickets
 
-    # Linear priority: 1=Urgent, 2=High, 3=Medium, 4=Low, 0=No priority
-    # Sort so Urgent (1) comes first, No priority (0) comes last
-    def priority_sort_key(t: LinearTicket) -> tuple[int, str]:
-        return (t.priority if t.priority > 0 else 99, t.identifier)
-
-    return sorted(tickets, key=priority_sort_key)
+    return sorted(tickets, key=linear_ticket_sort_key)
 
 
 def extract_markdown_section(body: str, heading: str) -> str:
