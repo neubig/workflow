@@ -67,6 +67,36 @@ class LinearTicketActionTests(unittest.TestCase):
         self.assertNotIn("git clone", instructions)
 
 
+class LinearTicketOrderingTests(unittest.TestCase):
+    def make_ticket(self, identifier, priority, due_date):
+        return MODULE.LinearTicket(
+            identifier=identifier,
+            title="Example",
+            description="",
+            priority=priority,
+            priority_label="High" if priority == 2 else "Medium",
+            state="Todo",
+            state_type="unstarted",
+            url=f"https://linear.app/example/issue/{identifier}",
+            due_date=due_date,
+        )
+
+    def test_same_priority_uses_earlier_due_date_first(self):
+        tickets = [
+            self.make_ticket("ALL-3", 2, None),
+            self.make_ticket("ALL-2", 2, "2026-08-11"),
+            self.make_ticket("ALL-1", 2, "2026-07-20"),
+            self.make_ticket("ALL-4", 3, "2026-07-01"),
+        ]
+
+        ordered = sorted(tickets, key=MODULE.linear_ticket_sort_key)
+
+        self.assertEqual(
+            [ticket.identifier for ticket in ordered],
+            ["ALL-1", "ALL-2", "ALL-3", "ALL-4"],
+        )
+
+
 class LinearBlockedIssueTests(unittest.TestCase):
     def test_blocked_state_omits_issue(self):
         node = {

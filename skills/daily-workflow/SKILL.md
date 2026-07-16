@@ -17,7 +17,8 @@ Use this skill when the user asks to review or organize their daily workflow. Th
 - When multiple Linear or Slack connections are available, examine all of them and consider their results together unless the user specifies otherwise; do not treat one connection as the complete work queue by default.
 - Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to the current user unless another owner is clearly intentional.
 - If a priority is set, the issue should not be in `triage`; set it to `todo` if no PR is open, `in progress` if a draft PR is open or a PR has been reviewed but no response to the review has been posted, and `under review` if the PR is ready but no review has been submitted. For issues in `under review`, suggest potential reviewers if none are assigned, but do not request a review unless asked to.
-- Omit blocked Linear issues from status tables and the interactive walkthrough. Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not mention blocked issues unless the user explicitly asks for them.
+- Order work by priority first, then by due date within the same priority: overdue dates first, then the earliest upcoming date, then work without a due date. Re-fetch due dates before every recommendation.
+- Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not present the blocked issue itself as actionable. Before omitting it, inspect its active blocker relations and follow the blocker chain until reaching an actionable issue. If that issue belongs to the current user, surface it as the next action and explain which higher-ranked ticket and deadline it unlocks. If every active blocker belongs to someone else or requires an external event, record the exact dependency internally and continue to the next actionable item.
 - When sharing the next workflow step, include the relevant Linear or GitHub link when available.
 - Make every suggested next action self-contained. Re-fetch the relevant state immediately before suggesting it, and never suggest merged, closed, stale, or otherwise non-actionable work.
 - Ask the user to make exactly one decision at a time. Provide context and links only for the highest-priority current decision, ask one concrete question, and stop. Do not bundle approvals or preview an "after that" queue.
@@ -142,17 +143,17 @@ Before walking the priority queue, fetch the current user's incomplete, unblocke
 
 When active unprioritized tickets exist:
 
-1. Exclude completed, canceled, duplicate, archived, and blocked tickets.
+1. Exclude completed, canceled, duplicate, and archived tickets. Inspect blocked candidates and their active blocker chains before removing them from the actionable queue.
 2. Inspect linked GitHub PRs/issues when available so merged or stale trackers can be closed or marked duplicate instead of prioritized.
-3. Rank the active unprioritized tickets internally, but do not ask for batch approval or present several priority decisions at once.
+3. Rank the active unprioritized tickets internally. When two tickets receive the same recommended priority, put the earlier due date first; put undated work after dated work. If the leading ticket is blocked, surface its highest-ranked actionable blocker instead.
 4. Present only the highest-priority ticket using the [Decision Context Format](#decision-context-format), recommend `High`, `Medium`, `Low`, or `Close/Duplicate`, and explain whether it blocks other work or people, has deadline or SLA risk, affects a core offering, is customer/admin/security sensitive, or is only cleanup.
 5. Ask the user to approve or correct that single recommendation. Apply only the approved priority/state change, then wait for the response before presenting another decision.
 
-## Step 7: Walk Linear Tickets by Priority
+## Step 7: Walk Linear Tickets by Priority and Deadline
 
-Fetch the current user's incomplete, unblocked assigned Linear tickets and sort by priority: `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`.
+Fetch the current user's incomplete assigned Linear tickets. Sort first by priority: `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`. Within each priority, sort overdue tickets first, then by ascending due date, then place tickets without a due date last.
 
-When using Linear MCP tools, request the current user's issues and filter out completed, canceled, duplicate, archived, and blocked work. Also exclude tickets with a `Blocked` label or an active blocker relation before building the table or starting the walkthrough.
+When using Linear MCP tools, request the current user's issues and filter out completed, canceled, duplicate, and archived work. Inspect blocked states, `Blocked` labels, and active blocker relations before building the actionable queue. Replace a blocked candidate with its highest-ranked active blocker when that blocker is actionable by the current user; follow nested blocker relations recursively. Do not let a later deadline at the same priority jump ahead merely because the earlier ticket is blocked.
 
 For each ticket, report:
 
@@ -199,14 +200,15 @@ After all eligible PRs have been attempted, emit the [PR Remediation Output](#pr
 
 ## Step 9: Interactive Linear Ticket Walkthrough
 
-Walk the sorted, unblocked Linear tickets one by one, starting with the highest-priority ticket. For each ticket:
+Walk the sorted, actionable Linear tickets one by one, starting with the highest priority and earliest due date. For each ticket:
 1. Give the user the [Decision Context Format](#decision-context-format): a concise, self-contained summary of the ticket, current state, linked GitHub work, CI/review/evidence status, what is blocked or ready, and the concrete next action.
-2. If the ticket requests cycle or sprint planning, switch to `$cycle-planning` and facilitate the planning session. Resume this walkthrough only after the session is completed or the user explicitly defers it.
-3. Ask the user what the next action should be before moving to the next ticket.
-4. Do not start implementation, mutate Linear, close tickets, or skip ahead unless the user explicitly chooses that action.
-5. If the user asks to skip a ticket, move to the next ticket in priority order and keep the skipped ticket in the final action list.
-6. If Linear access is unavailable, do not attempt the interactive walkthrough; instead report the missing Linear access needed to fetch assigned tickets.
-7. Do not preview or ask about the next ticket in the same response. End after the single current decision question.
+2. If the ticket is blocked, follow its active blocker chain. Present the first actionable blocker instead and state the blocked ticket's priority and deadline that make the blocker timely.
+3. If the ticket requests cycle or sprint planning, switch to `$cycle-planning` and facilitate the planning session. Resume this walkthrough only after the session is completed or the user explicitly defers it.
+4. Ask the user what the next action should be before moving to the next ticket.
+5. Do not start implementation, mutate Linear, close tickets, or skip ahead unless the user explicitly chooses that action.
+6. If the user asks to skip a ticket, move to the next ticket in the same priority by due date, then continue in priority order, and keep the skipped ticket in the final action list.
+7. If Linear access is unavailable, do not attempt the interactive walkthrough; instead report the missing Linear access needed to fetch assigned tickets.
+8. Do not preview or ask about the next ticket in the same response. End after the single current decision question.
 
 ## Initial Status Output
 
