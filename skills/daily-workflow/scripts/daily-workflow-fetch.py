@@ -343,8 +343,22 @@ class WorkflowChecklist:
     ready_prs: list[GitHubPR] = field(default_factory=list)
     draft_prs: list[GitHubPR] = field(default_factory=list)
     github_metadata: dict[str, Any] = field(default_factory=dict)
-    action_limit: int = 0
     fetch_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def highest_priority_linear_tickets(self) -> list[LinearTicket]:
+        """Return every actionable ticket tied at the highest active priority."""
+        tickets = sorted(
+            (ticket for ticket in self.linear_tickets if ticket.is_actionable),
+            key=linear_ticket_sort_key,
+        )
+        if not tickets:
+            return []
+        highest_rank = linear_ticket_sort_key(tickets[0])[0]
+        return [
+            ticket
+            for ticket in tickets
+            if linear_ticket_sort_key(ticket)[0] == highest_rank
+        ]
 
     def action_items(self) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
@@ -355,6 +369,8 @@ class WorkflowChecklist:
                         "kind": "review_request",
                         "title": f"{pr.repo}#{pr.number} — {pr.title}",
                         "url": pr.url,
+                        "priority": None,
+                        "priority_label": None,
                         "summary": pr.get_action_instructions().splitlines()[0]
                         .removeprefix("**Action**: "),
                         "related_issues": [
@@ -363,12 +379,14 @@ class WorkflowChecklist:
                         ],
                     }
                 )
-        for ticket in self.linear_tickets:
+        for ticket in self.highest_priority_linear_tickets():
             items.append(
                 {
                     "kind": "linear",
                     "title": f"{ticket.identifier} — {ticket.title}",
                     "url": ticket.url,
+                    "priority": ticket.priority,
+                    "priority_label": ticket.priority_label,
                     "summary": ticket.get_action_instructions().splitlines()[0]
                     .removeprefix("**Action**: "),
                     "related_issues": [
@@ -384,6 +402,8 @@ class WorkflowChecklist:
                         "kind": "authored_pr",
                         "title": f"{pr.repo}#{pr.number} — {pr.title}",
                         "url": pr.url,
+                        "priority": None,
+                        "priority_label": None,
                         "summary": pr.get_action_instructions().splitlines()[0]
                         .removeprefix("**Action**: "),
                         "related_issues": [
@@ -392,13 +412,16 @@ class WorkflowChecklist:
                         ],
                     }
                 )
-        return items[: self.action_limit or None]
+        return items
 
     def to_markdown(self) -> str:
         lines = ["# Daily Workflow - Action Items", ""]
         lines.append(f"*Generated: {self.fetch_time.strftime('%Y-%m-%d %H:%M UTC')}*")
         lines.append("")
-        lines.append("Work through each item in order. Execute the commands provided.")
+        lines.append(
+            "This report lists the current actionable GitHub work and every Linear "
+            "ticket tied at the highest active priority."
+        )
         lines.append("")
         lines.append("## Action Items")
         lines.append("")
@@ -408,7 +431,13 @@ class WorkflowChecklist:
         else:
             for index, item in enumerate(actions, start=1):
                 lines.append(
-                    f"{index}. [{item['title']}]({item['url']}) — {item['summary']}"
+                    f"{index}. [{item['title']}]({item['url']})"
+                    + (
+                        f" — {item['priority_label']} ({item['priority']})"
+                        if item["kind"] == "linear"
+                        else ""
+                    )
+                    + f" — {item['summary']}"
                 )
                 if item["related_issues"]:
                     related = ", ".join(
@@ -431,35 +460,25 @@ class WorkflowChecklist:
                 lines.append(pr.get_action_instructions())
                 lines.append("")
 
-        # Phase 2: Linear Tickets
+        # Phase 2: Highest-priority Linear ticket cohort
+        highest_priority_tickets = self.highest_priority_linear_tickets()
         lines.append("---")
-        lines.append("## Phase 2: Linear Tickets")
+        lines.append("## Phase 2: Highest-Priority Linear Tickets")
         lines.append("")
-        if not self.linear_tickets:
+        if not highest_priority_tickets:
             lines.append("✅ No open tickets assigned.")
         else:
-            # Group by priority
-            by_priority: dict[int, list[LinearTicket]] = {}
-            for t in self.linear_tickets:
-                by_priority.setdefault(t.priority, []).append(t)
-
-            # Linear priority: 1=Urgent, 2=High, 3=Medium, 4=Low, 0=No priority
-            # Sort so Urgent (1) comes first, No priority (0) comes last
-            def priority_sort_key(p: int) -> int:
-                return p if p > 0 else 99  # Move "No priority" (0) to end
-
-            for priority in sorted(by_priority.keys(), key=priority_sort_key):
-                tickets = sorted(by_priority[priority], key=linear_ticket_sort_key)
-                label = tickets[0].priority_label if tickets else "Unknown"
-                lines.append(f"### {label} Priority")
+            label = highest_priority_tickets[0].priority_label
+            value = highest_priority_tickets[0].priority
+            lines.append(f"### {label} Priority ({value})")
+            lines.append("")
+            for t in highest_priority_tickets:
+                lines.append(f"#### [{t.identifier}]({t.url}): {t.title}")
+                lines.append(f"**State**: {t.state}")
+                lines.append(f"**Due**: {t.due_date or 'No due date'}")
                 lines.append("")
-                for t in tickets:
-                    lines.append(f"#### [{t.identifier}]({t.url}): {t.title}")
-                    lines.append(f"**State**: {t.state}")
-                    lines.append(f"**Due**: {t.due_date or 'No due date'}")
-                    lines.append("")
-                    lines.append(t.get_action_instructions())
-                    lines.append("")
+                lines.append(t.get_action_instructions())
+                lines.append("")
 
         # Phase 3: Ready PRs
         lines.append("---")
@@ -505,10 +524,19 @@ class WorkflowChecklist:
         return "\n".join(lines)
 
     def to_json(self) -> str:
+        highest_priority_tickets = self.highest_priority_linear_tickets()
         return json.dumps(
             {
                 "fetch_time": self.fetch_time.isoformat(),
                 "github_metadata": self.github_metadata,
+                "highest_linear_priority": (
+                    {
+                        "value": highest_priority_tickets[0].priority,
+                        "label": highest_priority_tickets[0].priority_label,
+                    }
+                    if highest_priority_tickets
+                    else None
+                ),
                 "action_items": self.action_items(),
                 "review_requests": [
                     {
@@ -548,7 +576,7 @@ class WorkflowChecklist:
                         ],
                         "action_instructions": t.get_action_instructions(),
                     }
-                    for t in self.linear_tickets
+                    for t in highest_priority_tickets
                 ],
                 "ready_prs": [
                     {
@@ -845,19 +873,11 @@ def main():
         default="markdown",
         help="Output format",
     )
-    parser.add_argument(
-        "--action-limit",
-        type=int,
-        default=0,
-        help="Limit the concise action-item summary (0 means no limit)",
-    )
     parser.add_argument("--skip-linear", action="store_true", help="Skip Linear fetch")
     parser.add_argument("--skip-github", action="store_true", help="Skip GitHub fetch")
     args = parser.parse_args()
-    if args.action_limit < 0:
-        parser.error("--action-limit must be zero or greater")
 
-    checklist = WorkflowChecklist(action_limit=args.action_limit)
+    checklist = WorkflowChecklist()
     linear_key = None if args.skip_linear else os.environ.get("LINEAR_API_KEY")
     if not args.skip_linear and not linear_key:
         print("LINEAR_API_KEY not set, skipping Linear", file=sys.stderr)

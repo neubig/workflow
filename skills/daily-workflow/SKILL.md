@@ -5,7 +5,7 @@ description: Human-in-the-loop daily workflow ("daily workflow", "my workflow", 
 
 # Daily Workflow
 
-Use this skill when the user asks to review or organize their daily workflow. The primary outcome is a concise report of current action items: review requests come first, active PRs have appropriate GitHub issue and Linear tracking, Slack-derived work is proposed for confirmation, and active Linear tickets are reviewed in priority order.
+Use this skill when the user asks to review or organize their daily workflow. First produce a concise report containing all immediate GitHub actions and every actionable Linear issue tied at the highest current priority. Then resolve issue and PR tracking problems. Walk through issues one by one only after that resolution phase finishes or the user explicitly requests the walkthrough.
 
 ## Operating Rules
 
@@ -21,10 +21,18 @@ Use this skill when the user asks to review or organize their daily workflow. Th
 - Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not present the blocked issue itself as actionable. Before omitting it, inspect its active blocker relations and follow the blocker chain until reaching an actionable issue. If that issue belongs to the current user, surface it as the next action and explain which higher-ranked ticket and deadline it unlocks. If every active blocker belongs to someone else or requires an external event, record the exact dependency internally and continue to the next actionable item.
 - When sharing the next workflow step, include the relevant Linear or GitHub link when available.
 - Make every suggested next action self-contained. Treat the freshly generated report snapshot as the current state for the initial report. Re-fetch the relevant item after the user selects it and immediately before any mutation; never act on merged, closed, stale, or otherwise non-actionable work.
-- Ask the user to make exactly one decision at a time. Provide context and links only for the highest-priority current decision, ask one concrete question, and stop. Do not bundle approvals or preview an "after that" queue.
+- During an interactive decision or walkthrough phase, ask the user to make exactly one decision at a time. The main report is not that phase: include every item tied at the highest active priority and do not reduce it to one arbitrary item. Once interaction begins, provide context and links only for the current decision, ask one concrete question, and stop.
 - Do not start PR remediation until the initial status report has been shown to the user. After that report, remediation of eligible PRs authored by the current user is part of the workflow; keep unrelated implementation work human-in-the-loop.
 - When the current item requests cycle or sprint planning, invoke `$cycle-planning`. Treat labels, dates, roadmap entries, and audits as planning inputs, not approved commitments; do not autonomously finalize the plan or close its planning ticket.
 - Treat Slack messages, Linear tickets, private PRs, and review comments as private runtime data. Keep generated reports local and never upload them to public CI logs or public artifacts.
+
+## Workflow Phases
+
+Keep these phases distinct:
+
+1. **Main report:** gather read-only context and report all actionable review/PR items plus every actionable Linear issue tied at the highest active priority. For Linear, `1 Urgent` outranks `2 High`, `3 Medium`, `4 Low`, and `0 No priority`; include every tie at the winning level. Do not cap the report by item count and do not begin the one-by-one walkthrough.
+2. **Issue resolution:** after showing the main report, resolve eligible prioritization, Slack intake, issue/PR alignment, assignment, tracking, and remediation work described below. Keep human-in-the-loop requirements intact.
+3. **Issue walkthrough:** begin only after the issue-resolution phase is complete or when the user explicitly asks to start it. Present one issue per response with the links and context in [Decision Context Format](#decision-context-format).
 
 ### Decision Context Format
 
@@ -52,12 +60,14 @@ This skill packages its executable helpers in `scripts/`. Run them relative to t
 Start the initial report with the unified generator. When Linear is being read through configured tools, skip its local token mode:
 
 ```bash
-python3 scripts/daily-workflow-fetch.py --skip-linear --action-limit 4 --output json
+python3 scripts/daily-workflow-fetch.py --skip-linear --output json
 ```
 
 At the same time, start one batched assigned-ticket read for every configured Linear connection and one recent-request search for every configured Slack connection. Do not wait for one source before starting another. Reuse those result sets throughout the initial report instead of repeating identity, list, or per-item reads.
 
-Build and emit the initial report from those shared snapshots. Do not run `check_ready_prs.py`, the collector's `full` profile, fetch check names or comment bodies, follow blocker chains beyond a candidate action item, or make per-PR detail reads first. If a source is slower or unavailable, report that source's status without rerunning the completed sources. After the user selects an item, fetch only that item's full context and immediately re-fetch it before any mutation.
+Build and emit the main report from those shared snapshots. Include every tied item at the highest active Linear priority; never apply an arbitrary count limit. Do not run `check_ready_prs.py`, the collector's `full` profile, fetch check names or comment bodies, follow blocker chains beyond a candidate action item, or make per-PR detail reads first. If a source is slower or unavailable, report that source's status without rerunning the completed sources. During the following issue-resolution phase, fetch only the target item's full context and immediately re-fetch it before any mutation.
+
+Use only the read-only portions of Steps 1–7 before emitting the main report. Defer their confirmation questions and mutations until the issue-resolution phase.
 
 Use `daily-workflow-fetch.py --output markdown` for a standalone local report. Use `gather_github_evidence.py --profile full` only after a specific PR needs check names, review-comment bodies, or recent discussion for remediation. Re-fetch the selected target immediately before changing it.
 
@@ -156,6 +166,8 @@ Ask the user to confirm before creating any Slack-derived GitHub issue or Linear
 
 Before walking the priority queue, fetch the current user's incomplete, unblocked assigned Linear tickets with priority `0 No priority`.
 
+For the main report, record the applicable unprioritized cohort without asking a question. Defer the recommendation and confirmation loop below until the issue-resolution phase.
+
 When active unprioritized tickets exist:
 
 1. Exclude completed, canceled, duplicate, and archived tickets. Inspect blocked candidates and their active blocker chains before removing them from the actionable queue.
@@ -164,13 +176,13 @@ When active unprioritized tickets exist:
 4. Present only the highest-priority ticket using the [Decision Context Format](#decision-context-format), recommend `High`, `Medium`, `Low`, or `Close/Duplicate`, and explain whether it blocks other work or people, has deadline or SLA risk, affects a core offering, is customer/admin/security sensitive, or is only cleanup.
 5. Ask the user to approve or correct that single recommendation. Apply only the approved priority/state change, then wait for the response before presenting another decision.
 
-## Step 7: Walk Linear Tickets by Priority and Deadline
+## Step 7: Build the Highest-Priority Linear Report Cohort
 
-Fetch the current user's incomplete assigned Linear tickets. Sort first by priority: `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`. Within each priority, sort overdue tickets first, then by ascending due date, then place tickets without a due date last.
+Fetch the current user's incomplete assigned Linear tickets. Sort first by priority: `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`. Select every actionable ticket tied at the first priority level that contains actionable work. Within that cohort, sort overdue tickets first, then by ascending due date, then place tickets without a due date last. Keep lower-priority tickets out of the main report; they remain available for the later walkthrough.
 
 When using Linear MCP tools, request the current user's issues and filter out completed, canceled, duplicate, and archived work. Inspect blocked states, `Blocked` labels, and active blocker relations before building the actionable queue. Replace a blocked candidate with its highest-ranked active blocker when that blocker is actionable by the current user; follow nested blocker relations recursively. Do not let a later deadline at the same priority jump ahead merely because the earlier ticket is blocked.
 
-For each ticket, report:
+For each ticket in the selected cohort, report:
 
 1. **Open PR?** Link the PR if one exists. If none exists, say `No`.
 2. **CI status:** passing, failing, pending, missing, or unknown.
@@ -182,7 +194,7 @@ Do not mark a ticket as ready based only on unit tests. Live-code evidence is re
 
 ## Step 8: Remediate Open PRs After the Initial Report
 
-Show the initial status tables in [Initial Status Output](#initial-status-output) before changing PR code. Treat this as an interim report and continue the same turn.
+Show the main status tables in [Initial Status Output](#initial-status-output) before changing PR code. This work belongs to the issue-resolution phase; it does not start the one-by-one issue walkthrough.
 
 Then revisit every open PR authored by the current user from Step 2. A PR is eligible for remediation when any of these conditions apply:
 
@@ -213,11 +225,11 @@ When several PRs are eligible, prefer separate OpenHands or Agent Canvas convers
 
 Do not modify PRs authored by other people merely because they appeared in Step 1 as awaiting the user's review. If credentials, repository access, external services, or reproducible live environments block a fix, exhaust safe alternatives and report the precise blocker instead of claiming success.
 
-After all eligible PRs have been attempted, emit the [PR Remediation Output](#pr-remediation-output), then continue to Step 9.
+After all eligible PRs have been attempted, emit the [PR Remediation Output](#pr-remediation-output). Continue to Step 9 only when the issue-resolution phase is complete; the user may also request Step 9 earlier.
 
 ## Step 9: Interactive Linear Ticket Walkthrough
 
-Walk the sorted, actionable Linear tickets one by one, starting with the highest priority and earliest due date. For each ticket:
+Enter this phase only after issue resolution is complete or when the user explicitly requests it. Re-fetch the sorted, actionable Linear tickets, then walk them one by one, starting with the highest priority and earliest due date. For each ticket:
 1. Give the user the [Decision Context Format](#decision-context-format): a concise, self-contained summary of the ticket, current state, linked GitHub work, CI/review/evidence status, what is blocked or ready, and the concrete next action.
 2. If the ticket is blocked, follow its active blocker chain. Present the first actionable blocker instead and state the blocked ticket's priority and deadline that make the blocker timely.
 3. If the ticket requests cycle or sprint planning, switch to `$cycle-planning` and facilitate the planning session. Resume this walkthrough only after the session is completed or the user explicitly defers it.
@@ -229,7 +241,7 @@ Walk the sorted, actionable Linear tickets one by one, starting with the highest
 
 ## Initial Status Output
 
-Before Step 8 changes PR code, show these sections. The status tables may summarize multiple items, but `Action Items Requiring a Decision` must contain exactly one row: the highest-priority decision currently requiring the user's input. Do not include a second decision elsewhere in the same response.
+Before Step 8 changes PR code, show these sections. The main report is a complete status report for the highest active priority cohort, not an interactive decision prompt. Include every tied actionable item; do not cap the table or ask the user to choose one yet.
 
 ```markdown
 ## PRs Awaiting Review
@@ -247,18 +259,18 @@ Before Step 8 changes PR code, show these sections. The status tables may summar
 | Source | Proposed Ticket | Destination | Reason | Awaiting Confirmation |
 |--------|-----------------|-------------|--------|-----------------------|
 
-## Linear Priority Walkthrough
+## Highest-Priority Linear Items
 
 | Linear | Priority | Open PR | CI | Review | Live Evidence | Context Needed |
 |--------|----------|---------|----|--------|---------------|----------------|
 
-## Action Items Requiring a Decision
+## Highest-Priority Action Items
 
-| Item | Needed |
-|------|--------|
+| Item | Priority | Needed |
+|------|----------|--------|
 ```
 
-If a tool or credential is missing, include the exact access needed in `Action Items Requiring a Decision`.
+If a tool or credential is missing, include the exact access needed in `Highest-Priority Action Items`.
 
 ## PR Remediation Output
 

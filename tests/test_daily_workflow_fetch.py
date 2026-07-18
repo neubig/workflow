@@ -178,7 +178,20 @@ class BatchedGitHubContextTests(unittest.TestCase):
 
 
 class ActionItemReportTests(unittest.TestCase):
-    def test_action_limit_keeps_review_requests_first(self):
+    def make_ticket(self, identifier, priority, label, due_date=None):
+        return MODULE.LinearTicket(
+            identifier=identifier,
+            title=f"Ticket {identifier}",
+            description="",
+            priority=priority,
+            priority_label=label,
+            state="Todo",
+            state_type="unstarted",
+            url=f"https://linear.app/example/issue/{identifier}",
+            due_date=due_date,
+        )
+
+    def test_report_includes_every_ticket_at_highest_active_priority(self):
         review = MODULE.GitHubPR(
             repo="example/repo",
             number=1,
@@ -188,33 +201,52 @@ class ActionItemReportTests(unittest.TestCase):
             created_at=MODULE.datetime.now(MODULE.timezone.utc),
             awaiting_user_review=True,
         )
-        ticket = MODULE.LinearTicket(
-            identifier="ALL-1",
-            title="Next ticket",
-            description="",
-            priority=1,
-            priority_label="Urgent",
-            state="Todo",
-            state_type="unstarted",
-            url="https://linear.app/example/issue/ALL-1",
-        )
         checklist = MODULE.WorkflowChecklist(
             review_requests=[review],
-            linear_tickets=[ticket],
-            action_limit=1,
+            linear_tickets=[
+                self.make_ticket("ALL-3", 2, "High"),
+                self.make_ticket("ALL-2", 1, "Urgent", "2026-07-20"),
+                self.make_ticket("ALL-1", 1, "Urgent", "2026-07-19"),
+                self.make_ticket("ALL-4", 0, "No priority"),
+            ],
+        )
+
+        actions = checklist.action_items()
+        self.assertEqual(
+            [item["title"] for item in actions],
+            [
+                "example/repo#1 — Review me",
+                "ALL-1 — Ticket ALL-1",
+                "ALL-2 — Ticket ALL-2",
+            ],
+        )
+        self.assertEqual([item["priority"] for item in actions[1:]], [1, 1])
+
+        payload = MODULE.json.loads(checklist.to_json())
+        self.assertEqual(
+            payload["highest_linear_priority"], {"value": 1, "label": "Urgent"}
+        )
+        self.assertEqual(
+            [ticket["identifier"] for ticket in payload["linear_tickets"]],
+            ["ALL-1", "ALL-2"],
+        )
+        markdown = checklist.to_markdown()
+        self.assertIn("ALL-1", markdown)
+        self.assertIn("ALL-2", markdown)
+        self.assertNotIn("ALL-3", markdown)
+        self.assertNotIn("ALL-4", markdown)
+
+    def test_no_priority_tickets_form_the_cohort_when_they_are_all_that_remain(self):
+        checklist = MODULE.WorkflowChecklist(
+            linear_tickets=[
+                self.make_ticket("ALL-2", 0, "No priority"),
+                self.make_ticket("ALL-1", 0, "No priority"),
+            ]
         )
 
         self.assertEqual(
-            checklist.action_items(),
-            [
-                {
-                    "kind": "review_request",
-                    "title": "example/repo#1 — Review me",
-                    "url": "https://github.com/example/repo/pull/1",
-                    "summary": "Review now and verify live evidence with the author",
-                    "related_issues": [],
-                }
-            ],
+            [ticket.identifier for ticket in checklist.highest_priority_linear_tickets()],
+            ["ALL-1", "ALL-2"],
         )
 
     def test_draft_conflicts_are_rendered_before_other_draft_actions(self):
