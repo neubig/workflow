@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import re
 import shutil
@@ -14,7 +15,93 @@ from pathlib import Path
 from typing import Any
 
 
-QUERY = r"""
+REPORT_THREADS_QUERY = r"""
+query($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on PullRequest {
+      id
+      reviewThreads(first: 50) {
+        pageInfo { hasNextPage }
+        nodes { id isResolved isOutdated path line startLine }
+      }
+      files(first: 100) {
+        pageInfo { hasNextPage }
+        nodes { path }
+      }
+    }
+  }
+}
+"""
+
+
+REPORT_ISSUES_QUERY = r"""
+query($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on PullRequest {
+      id
+      closingIssuesReferences(first: 20) {
+        pageInfo { hasNextPage }
+        nodes {
+          number
+          title
+          url
+          state
+          repository { nameWithOwner }
+          assignees(first: 10) {
+            pageInfo { hasNextPage }
+            nodes { login }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+REPORT_STATUS_QUERY = r"""
+query($ids: [ID!]!) {
+  viewer { login }
+  rateLimit { cost remaining resetAt }
+  nodes(ids: $ids) {
+    ... on PullRequest {
+      id
+      baseRefName
+      baseRefOid
+      headRefName
+      headRefOid
+      mergeable
+      mergeStateStatus
+      reviewDecision
+      headRepository { nameWithOwner }
+      reviewRequests(first: 20) {
+        pageInfo { hasNextPage }
+        nodes {
+          requestedReviewer {
+            ... on User { login }
+            ... on Team { name slug }
+          }
+        }
+      }
+      commits(last: 1) {
+        nodes {
+          commit {
+            oid
+            committedDate
+            statusCheckRollup { state }
+          }
+        }
+      }
+      timelineItems(last: 1, itemTypes: [READY_FOR_REVIEW_EVENT]) {
+        nodes { ... on ReadyForReviewEvent { createdAt } }
+      }
+    }
+  }
+}
+"""
+
+
+FULL_QUERY = r"""
 query(
   $reviewQuery: String!
   $authoredQuery: String!
@@ -47,6 +134,7 @@ query(
 }
 
 fragment PullRequestEvidence on PullRequest {
+  id
   number
   title
   url
@@ -160,6 +248,9 @@ fragment PullRequestEvidence on PullRequest {
       }
     }
   }
+  timelineItems(last: 1, itemTypes: [READY_FOR_REVIEW_EVENT]) {
+    nodes { ... on ReadyForReviewEvent { createdAt } }
+  }
 }
 """
 
@@ -212,8 +303,8 @@ CONTENT_PREFIXES = {"docs/", "skills/"}
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Batch the GitHub portion of the daily workflow with GraphQL. "
-            "The collector is read-only and normally needs one API request."
+            "Pipeline the GitHub portion of the daily workflow with REST discovery "
+            "and concurrent GraphQL detail reads. The collector is read-only."
         )
     )
     parser.add_argument(
@@ -232,6 +323,15 @@ def parse_args() -> argparse.Namespace:
         "--format", choices=("json", "markdown"), default="json"
     )
     parser.add_argument(
+        "--profile",
+        choices=("report", "full"),
+        default="report",
+        help=(
+            "report fetches only action-ranking context; full also fetches check, "
+            "review, and comment details"
+        ),
+    )
+    parser.add_argument(
         "--include-body", action="store_true", help="Include complete PR bodies"
     )
     parser.add_argument("--output", default="-", help="Output path, or - for stdout")
@@ -248,14 +348,18 @@ def require_gh() -> None:
         raise RuntimeError("gh is not authenticated; run gh auth login")
 
 
-def run_graphql(variables: dict[str, Any]) -> dict[str, Any]:
+def run_graphql(variables: dict[str, Any], query: str = FULL_QUERY) -> dict[str, Any]:
     command = ["gh", "api", "graphql", "-F", "query=@-"]
     for key, value in variables.items():
         if value is not None:
-            command.extend(["-F", f"{key}={value}"])
+            if isinstance(value, list):
+                for item in value:
+                    command.extend(["-F", f"{key}[]={item}"])
+            else:
+                command.extend(["-F", f"{key}={value}"])
     result = subprocess.run(
         command,
-        input=QUERY,
+        input=query,
         capture_output=True,
         text=True,
         check=False,
@@ -270,6 +374,71 @@ def run_graphql(variables: dict[str, Any]) -> dict[str, Any]:
     if payload.get("errors"):
         raise RuntimeError(json.dumps(payload["errors"], indent=2))
     return payload
+
+
+def run_search(query: str, max_prs: int) -> tuple[int, list[dict[str, Any]], int]:
+    """Fetch a PR search through REST, preserving bodies and GraphQL node IDs."""
+    items: list[dict[str, Any]] = []
+    total = 0
+    requests = 0
+    page = 1
+    while len(items) < max_prs:
+        page_size = min(100, max_prs - len(items))
+        command = [
+            "gh",
+            "api",
+            "-X",
+            "GET",
+            "/search/issues",
+            "-f",
+            f"q={query}",
+            "-F",
+            f"per_page={page_size}",
+            "-F",
+            f"page={page}",
+        ]
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            message = result.stderr.strip() or result.stdout.strip()
+            raise RuntimeError(message or "GitHub PR search failed")
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"GitHub search returned invalid JSON: {exc}") from exc
+        requests += 1
+        total = payload.get("total_count", total)
+        page_items = payload.get("items") or []
+        items.extend(page_items)
+        if len(page_items) < page_size or len(items) >= total:
+            break
+        page += 1
+    return total, items[:max_prs], requests
+
+
+def normalize_search_item(item: dict[str, Any]) -> dict[str, Any]:
+    repository_api_url = item.get("repository_url") or ""
+    marker = "/repos/"
+    repository = (
+        repository_api_url.split(marker, 1)[1]
+        if marker in repository_api_url
+        else None
+    )
+    return {
+        "id": item.get("node_id"),
+        "number": item.get("number"),
+        "title": item.get("title"),
+        "url": item.get("html_url"),
+        "state": str(item.get("state") or "").upper(),
+        "isDraft": item.get("draft", False),
+        "createdAt": item.get("created_at"),
+        "updatedAt": item.get("updated_at"),
+        "body": item.get("body") or "",
+        "author": {"login": (item.get("user") or {}).get("login")},
+        "repository": {
+            "nameWithOwner": repository,
+            "url": f"https://github.com/{repository}" if repository else None,
+        },
+    }
 
 
 def requested_reviewer(node: dict[str, Any]) -> str | None:
@@ -327,11 +496,12 @@ def summarize_checks(pr: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         checks.append(item)
         buckets[bucket].append(item)
 
-    if buckets["failing"]:
+    rollup_state = str(rollup.get("state") or "").upper()
+    if buckets["failing"] or (not checks and rollup_state in FAILURE_VALUES):
         summary = "failing"
-    elif buckets["pending"]:
+    elif buckets["pending"] or (not checks and rollup_state in PENDING_VALUES):
         summary = "pending"
-    elif checks:
+    elif checks or rollup_state in PASS_VALUES:
         summary = "passing"
     else:
         summary = "missing"
@@ -377,7 +547,13 @@ def evidence_summary(body: str) -> dict[str, Any]:
         "blocked_or_incomplete": blocked,
         "likely_genuine": heading_present
         and not blocked
-        and bool(runtime_signals or has_screenshot or has_prompt or has_fenced_output),
+        and bool(
+            runtime_signals
+            or has_screenshot
+            or has_prompt
+            or has_fenced_output
+            or (human_tested and section)
+        ),
         "human_tested": human_tested,
         "section_excerpt": section[:1200],
     }
@@ -484,6 +660,9 @@ def summarize_pr(
     else:
         review_summary = "unknown"
 
+    ready_nodes = (pr.get("timelineItems") or {}).get("nodes") or []
+    ready_at = ready_nodes[-1].get("createdAt") if ready_nodes else None
+
     result = {
         "repository": (pr.get("repository") or {}).get("nameWithOwner"),
         "number": pr.get("number"),
@@ -494,6 +673,7 @@ def summarize_pr(
         "author": (pr.get("author") or {}).get("login"),
         "created_at": pr.get("createdAt"),
         "updated_at": pr.get("updatedAt"),
+        "ready_at": ready_at,
         "base_ref": pr.get("baseRefName"),
         "base_oid": pr.get("baseRefOid"),
         "head_ref": pr.get("headRefName"),
@@ -549,7 +729,11 @@ def summarize_pr(
 
 
 def gather(
-    author: str, reviewer: str, max_prs: int, include_body: bool
+    author: str,
+    reviewer: str,
+    max_prs: int,
+    include_body: bool,
+    profile: str = "report",
 ) -> dict[str, Any]:
     page_size = min(100, max_prs)
     review_query = f"is:pr is:open review-requested:{reviewer} sort:updated-desc"
@@ -562,37 +746,100 @@ def gather(
     viewer_login = ""
     rate_limit = None
     api_requests = 0
+    global_warnings: set[str] = set()
 
-    while not (review_done and authored_done):
-        payload = run_graphql(
-            {
-                "reviewQuery": review_query,
-                "authoredQuery": authored_query,
-                "reviewCursor": review_cursor,
-                "authoredCursor": authored_cursor,
-                "pageSize": page_size,
-            }
+    if profile == "report":
+        queue_nodes: dict[str, list[dict[str, Any]]] = {}
+        details_by_id: dict[str, dict[str, Any]] = {}
+        report_queries = (
+            REPORT_THREADS_QUERY,
+            REPORT_ISSUES_QUERY,
+            REPORT_STATUS_QUERY,
         )
-        api_requests += 1
-        data = payload["data"]
-        viewer_login = data["viewer"]["login"]
-        rate_limit = data.get("rateLimit")
-        review_total = data["reviewRequested"].get("issueCount", review_total)
-        authored_total = data["authored"].get("issueCount", authored_total)
-        for key, target in (
-            ("reviewRequested", review_raw),
-            ("authored", authored_raw),
-        ):
-            for node in data[key].get("nodes") or []:
-                if node and node.get("url"):
-                    target[node["url"]] = node
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            search_futures = {
+                executor.submit(run_search, review_query, max_prs): "review",
+                executor.submit(run_search, authored_query, max_prs): "authored",
+            }
+            detail_futures: dict[concurrent.futures.Future[Any], bool] = {}
+            for future in concurrent.futures.as_completed(search_futures):
+                queue_name = search_futures[future]
+                total, items, request_count = future.result()
+                api_requests += request_count
+                nodes = [normalize_search_item(item) for item in items]
+                queue_nodes[queue_name] = nodes
+                if queue_name == "review":
+                    review_total = total
+                else:
+                    authored_total = total
+                for node in nodes:
+                    if node.get("id"):
+                        details_by_id.setdefault(node["id"], {}).update(node)
+                ids = [node["id"] for node in nodes if node.get("id")]
+                for start in range(0, len(ids), 100):
+                    variables = {"ids": ids[start : start + 100]}
+                    for query in report_queries:
+                        detail_futures[
+                            executor.submit(run_graphql, variables, query)
+                        ] = query == REPORT_STATUS_QUERY
 
-        review_page = data["reviewRequested"]["pageInfo"]
-        authored_page = data["authored"]["pageInfo"]
-        review_cursor = review_page.get("endCursor") or review_cursor
-        authored_cursor = authored_page.get("endCursor") or authored_cursor
-        review_done = not review_page.get("hasNextPage") or len(review_raw) >= max_prs
-        authored_done = not authored_page.get("hasNextPage") or len(authored_raw) >= max_prs
+            for future in concurrent.futures.as_completed(detail_futures):
+                payload = future.result()
+                api_requests += 1
+                data = payload["data"]
+                if detail_futures[future]:
+                    viewer_login = data["viewer"]["login"]
+                    rate_limit = data.get("rateLimit")
+                for node in data.get("nodes") or []:
+                    if node and node.get("id"):
+                        details_by_id.setdefault(node["id"], {}).update(node)
+
+        review_raw = {
+            node["url"]: details_by_id[node["id"]]
+            for node in queue_nodes.get("review", [])
+            if node.get("url") and node.get("id") in details_by_id
+        }
+        authored_raw = {
+            node["url"]: details_by_id[node["id"]]
+            for node in queue_nodes.get("authored", [])
+            if node.get("url") and node.get("id") in details_by_id
+        }
+    else:
+        while not (review_done and authored_done):
+            payload = run_graphql(
+                {
+                    "reviewQuery": review_query,
+                    "authoredQuery": authored_query,
+                    "reviewCursor": review_cursor,
+                    "authoredCursor": authored_cursor,
+                    "pageSize": page_size,
+                },
+                FULL_QUERY,
+            )
+            api_requests += 1
+            data = payload["data"]
+            viewer_login = data["viewer"]["login"]
+            rate_limit = data.get("rateLimit")
+            review_total = data["reviewRequested"].get("issueCount", review_total)
+            authored_total = data["authored"].get("issueCount", authored_total)
+            for key, target in (
+                ("reviewRequested", review_raw),
+                ("authored", authored_raw),
+            ):
+                for node in data[key].get("nodes") or []:
+                    if node and node.get("url"):
+                        target[node["url"]] = node
+
+            review_page = data["reviewRequested"]["pageInfo"]
+            authored_page = data["authored"]["pageInfo"]
+            review_cursor = review_page.get("endCursor") or review_cursor
+            authored_cursor = authored_page.get("endCursor") or authored_cursor
+            review_done = (
+                not review_page.get("hasNextPage") or len(review_raw) >= max_prs
+            )
+            authored_done = (
+                not authored_page.get("hasNextPage") or len(authored_raw) >= max_prs
+            )
 
     assignment_login = viewer_login if author == "@me" else author.lstrip("@")
     review_items = [
@@ -605,7 +852,7 @@ def gather(
     ]
     review_items.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
     authored_items.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
-    warnings = {
+    warnings = global_warnings | {
         f"{item['repository']}#{item['number']}: {warning}"
         for item in review_items + authored_items
         for warning in item["warnings"]
@@ -620,12 +867,14 @@ def gather(
         "viewer": viewer_login,
         "author_query": author,
         "reviewer_query": reviewer,
+        "profile": profile,
         "api_requests": api_requests,
         "rate_limit": rate_limit,
         "prs_awaiting_review": review_items,
         "authored_open_prs": authored_items,
         "warnings": sorted(warnings),
         "notes": [
+            "The report profile omits expensive detail; use --profile full or a targeted read before remediation.",
             "Live-evidence classification is heuristic; inspect the section before acting.",
             "Content-only and housekeeping exemptions require human judgment.",
             "Re-fetch a target PR before any mutation or recommendation.",
@@ -734,7 +983,13 @@ def main() -> int:
         return 2
     try:
         require_gh()
-        snapshot = gather(args.author, args.reviewer, args.max_prs, args.include_body)
+        snapshot = gather(
+            args.author,
+            args.reviewer,
+            args.max_prs,
+            args.include_body,
+            args.profile,
+        )
     except (KeyError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

@@ -5,7 +5,7 @@ description: Human-in-the-loop daily workflow ("daily workflow", "my workflow", 
 
 # Daily Workflow
 
-Use this skill when the user asks to review or organize their daily workflow. The goal is to make the user's work queue coherent before implementation: review requests come first, active PRs have appropriate GitHub issue and Linear tracking, Slack-derived work is proposed for confirmation, and active Linear tickets are reviewed in priority order.
+Use this skill when the user asks to review or organize their daily workflow. The primary outcome is a concise report of current action items: review requests come first, active PRs have appropriate GitHub issue and Linear tracking, Slack-derived work is proposed for confirmation, and active Linear tickets are reviewed in priority order.
 
 ## Operating Rules
 
@@ -20,7 +20,7 @@ Use this skill when the user asks to review or organize their daily workflow. Th
 - Order work by priority first, then by due date within the same priority: overdue dates first, then the earliest upcoming date, then work without a due date. Re-fetch due dates before every recommendation.
 - Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not present the blocked issue itself as actionable. Before omitting it, inspect its active blocker relations and follow the blocker chain until reaching an actionable issue. If that issue belongs to the current user, surface it as the next action and explain which higher-ranked ticket and deadline it unlocks. If every active blocker belongs to someone else or requires an external event, record the exact dependency internally and continue to the next actionable item.
 - When sharing the next workflow step, include the relevant Linear or GitHub link when available.
-- Make every suggested next action self-contained. Re-fetch the relevant state immediately before suggesting it, and never suggest merged, closed, stale, or otherwise non-actionable work.
+- Make every suggested next action self-contained. Treat the freshly generated report snapshot as the current state for the initial report. Re-fetch the relevant item after the user selects it and immediately before any mutation; never act on merged, closed, stale, or otherwise non-actionable work.
 - Ask the user to make exactly one decision at a time. Provide context and links only for the highest-priority current decision, ask one concrete question, and stop. Do not bundle approvals or preview an "after that" queue.
 - Do not start PR remediation until the initial status report has been shown to the user. After that report, remediation of eligible PRs authored by the current user is part of the workflow; keep unrelated implementation work human-in-the-loop.
 - When the current item requests cycle or sprint planning, invoke `$cycle-planning`. Treat labels, dates, roadmap entries, and audits as planning inputs, not approved commitments; do not autonomously finalize the plan or close its planning ticket.
@@ -43,17 +43,23 @@ Do not make the user open a link to understand the decision. Links are supportin
 
 This skill packages its executable helpers in `scripts/`. Run them relative to the skill root so the skill remains portable when installed independently.
 
-- `scripts/gather_github_evidence.py` batches the review-requested and authored-PR queues into a shared JSON or Markdown snapshot. It normally uses one read-only GitHub GraphQL request and includes mergeability, CI, linked issues and assignees, review threads, changed files, recent discussion, and live-evidence signals. Treat its evidence classification and remediation reasons as heuristics, follow every truncation warning with a targeted read, and keep generated reports local.
-- `scripts/daily-workflow-fetch.py` collects the current user's Linear and GitHub work into a local Markdown or JSON report. It requires an authenticated `gh` CLI for GitHub access and optionally uses `LINEAR_API_KEY` for its local Linear CLI mode. Keep its output local.
+- `scripts/gather_github_evidence.py` pipelines the review-requested and authored-PR queues into a shared JSON or Markdown snapshot. Its default `report` profile overlaps discovery and low-cost detail reads; use `--profile full` only for remediation detail. Treat its evidence classification and remediation reasons as heuristics, follow every truncation warning with a targeted read, and keep generated reports local.
+- `scripts/daily-workflow-fetch.py` generates the action-oriented Markdown or JSON report from the shared GitHub snapshot and optional local Linear data. It gathers GitHub and Linear concurrently when `LINEAR_API_KEY` is available. Keep its output local.
 - `scripts/check_ready_prs.py` checks the current user's open PRs against the readiness and live-evidence criteria used in this workflow. It requires `gh` authentication.
 
-Start the GitHub inventory with the batched collector:
+## Fast Report Path
+
+Start the initial report with the unified generator. When Linear is being read through configured tools, skip its local token mode:
 
 ```bash
-python3 scripts/gather_github_evidence.py --format json
+python3 scripts/daily-workflow-fetch.py --skip-linear --action-limit 4 --output json
 ```
 
-Use `--format markdown` for a compact report. Re-fetch a target PR immediately before recommending or changing anything; the snapshot is an inventory, not a lock on GitHub state. Continue to use configured connectors for Linear and Slack because they are intentionally outside this GitHub-only snapshot.
+At the same time, start one batched assigned-ticket read for every configured Linear connection and one recent-request search for every configured Slack connection. Do not wait for one source before starting another. Reuse those result sets throughout the initial report instead of repeating identity, list, or per-item reads.
+
+Build and emit the initial report from those shared snapshots. Do not run `check_ready_prs.py`, the collector's `full` profile, fetch check names or comment bodies, follow blocker chains beyond a candidate action item, or make per-PR detail reads first. If a source is slower or unavailable, report that source's status without rerunning the completed sources. After the user selects an item, fetch only that item's full context and immediately re-fetch it before any mutation.
+
+Use `daily-workflow-fetch.py --output markdown` for a standalone local report. Use `gather_github_evidence.py --profile full` only after a specific PR needs check names, review-comment bodies, or recent discussion for remediation. Re-fetch the selected target immediately before changing it.
 
 ## Step 1: Check PRs Awaiting the User's Review
 
