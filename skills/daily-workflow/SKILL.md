@@ -43,12 +43,21 @@ Do not make the user open a link to understand the decision. Links are supportin
 
 This skill packages its executable helpers in `scripts/`. Run them relative to the skill root so the skill remains portable when installed independently.
 
+- `scripts/gather_github_evidence.py` batches the review-requested and authored-PR queues into a shared JSON or Markdown snapshot. It normally uses one read-only GitHub GraphQL request and includes mergeability, CI, linked issues and assignees, review threads, changed files, recent discussion, and live-evidence signals. Treat its evidence classification and remediation reasons as heuristics, follow every truncation warning with a targeted read, and keep generated reports local.
 - `scripts/daily-workflow-fetch.py` collects the current user's Linear and GitHub work into a local Markdown or JSON report. It requires an authenticated `gh` CLI for GitHub access and optionally uses `LINEAR_API_KEY` for its local Linear CLI mode. Keep its output local.
 - `scripts/check_ready_prs.py` checks the current user's open PRs against the readiness and live-evidence criteria used in this workflow. It requires `gh` authentication.
 
+Start the GitHub inventory with the batched collector:
+
+```bash
+python3 scripts/gather_github_evidence.py --format json
+```
+
+Use `--format markdown` for a compact report. Re-fetch a target PR immediately before recommending or changing anything; the snapshot is an inventory, not a lock on GitHub state. Continue to use configured connectors for Linear and Slack because they are intentionally outside this GitHub-only snapshot.
+
 ## Step 1: Check PRs Awaiting the User's Review
 
-Find open PRs where the current GitHub user has been requested as a reviewer:
+Use `prs_awaiting_review` from the batched GitHub snapshot. If the collector is unavailable, find open PRs where the current GitHub user has been requested as a reviewer:
 
 ```bash
 gh search prs --review-requested=@me --state=open --json repository,number,title,url,isDraft,author,updatedAt
@@ -63,14 +72,14 @@ gh search prs --review-requested="$github_user" --state=open --json repository,n
 
 For each PR:
 
-1. Read the PR summary, changed files, CI status, review decision, and recent discussion. Use `gh pr view` or GitHub tools for details not returned by `gh search prs`.
+1. Read the PR summary, changed files, CI status, review decision, recent discussion, and unresolved thread state. Use the snapshot first; use `gh pr view` or GitHub tools for truncated or missing details.
 2. Classify it as `Ready for review`, `Draft/not ready`, `Blocked by CI`, `Needs author response`, or `Already handled/stale request`.
 3. Put PRs genuinely ready for the user's review before other workflow items.
 4. Do not perform the review or approve/request changes unless the user explicitly asks.
 
 ## Step 2: Inventory Open PRs and Their Issues
 
-Find all open PRs authored by the current GitHub user:
+Use `authored_open_prs` from the batched GitHub snapshot. If the collector is unavailable, find all open PRs authored by the current GitHub user:
 
 ```bash
 github_user="$(gh api user --jq .login)"
@@ -79,7 +88,7 @@ gh search prs --author="$github_user" --state=open --json repository,number,titl
 
 For each PR:
 
-1. Read the PR body, timeline, linked issues, closing keywords, and development links.
+1. Read the PR body, timeline, linked issues, closing keywords, and development links. Use the snapshot for the initial inventory and make targeted reads when evidence is missing or truncated.
 2. Determine whether it is associated with at least one GitHub issue.
 3. Record each associated issue and whether it is assigned to the current user.
 
@@ -182,6 +191,8 @@ Use the bundled readiness helper as an additional inventory before remediation w
 github_user="$(gh api user --jq .login)"
 python3 scripts/check_ready_prs.py --user "$github_user" --summary
 ```
+
+Use `remediation_candidate_reasons` from the batched snapshot to build the initial candidate list, then apply the eligibility rules above and re-fetch each candidate before working.
 
 For every eligible PR:
 
