@@ -16,6 +16,7 @@ Use this skill when the user asks to review or organize their daily workflow. Fi
 - Check Slack only when a Slack connector/tool is available. If unavailable, report that Slack intake could not be checked.
 - When multiple Linear or Slack connections are available, examine all of them and consider their results together unless the user specifies otherwise; do not treat one connection as the complete work queue by default.
 - Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to the current user unless another owner is clearly intentional.
+- Maintain exactly one canonical GitHub issue and one canonical Linear ticket for each unit of work. Before any issue creation or Linear ingestion, search every applicable GitHub repository and configured Linear connection using the PR URL/number, linked issue URL, branch name, normalized title, and substantive keywords. Reuse and update an existing tracker even when its title differs. Never launch competing create/ingest operations for the same candidate in parallel. When duplicates already exist, preserve the fuller tracker most directly linked by the PR, mark the others duplicate, and close their redundant GitHub issues with links to the canonical records.
 - If a priority is set, the issue should not be in `triage`; set it to `todo` if no PR is open, `in progress` if a draft PR is open or a PR has been reviewed but no response to the review has been posted, and `under review` if the PR is ready but no review has been submitted. For issues in `under review`, suggest potential reviewers if none are assigned, but do not request a review unless asked to.
 - Order work by priority first, then by due date within the same priority: overdue dates first, then the earliest upcoming date, then work without a due date. Re-fetch due dates before every recommendation.
 - Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not present the blocked issue itself as actionable. Before omitting it, inspect its active blocker relations and follow the blocker chain until reaching an actionable issue. If that issue belongs to the current user, surface it as the next action and explain which higher-ranked ticket and deadline it unlocks. If every active blocker belongs to someone else or requires an external event, record the exact dependency internally and continue to the next actionable item.
@@ -112,11 +113,11 @@ If a PR has no associated issue:
 
 First determine whether the PR exists exclusively as housekeeping for another PR. If so, do not open a separate issue: reference the upstream PR instead and treat that reference as sufficient tracking. For example, an infrastructure PR that only deploys a feature branch should reference that feature PR. Otherwise:
 
-1. Search for related issues in the same repository using title keywords, branch names, and PR body terms.
+1. Search for related issues in the same repository using the PR URL/number, title keywords, branch names, and PR body terms. Treat any issue already linked or closed by the PR as canonical unless it is clearly stale or broader work intentionally needs separate tracking.
 2. If a related issue exists, associate it with the PR by adding a clear issue link or closing keyword to the PR body, depending on whether the PR should close the issue.
 3. If no related issue exists, create a concise GitHub issue in the same repository, assign it to the current user, and associate the PR with it.
 
-Only create a GitHub issue without asking when the PR itself provides unambiguous code context. If the context is unclear, propose the issue title/body first.
+Only create a GitHub issue without asking when the PR itself provides unambiguous code context and the duplicate search returned no candidate. If the context is unclear or a possible match exists, propose the issue title/body or canonical-match decision first.
 
 ## Step 3: Ensure GitHub Issues Are Assigned
 
@@ -132,16 +133,20 @@ Before creating, ingesting, or associating a Linear issue, verify that the targe
 
 For every associated GitHub issue:
 
-1. Check whether it has been ingested into Linear.
-2. If a matching Linear ticket exists, verify it is assigned to the current Linear user.
-3. If the Linear ticket is unassigned or assigned to someone else, assign it to the current user unless another owner is clearly intentional.
-4. If no Linear ticket exists, create or request ingestion according to the available Linear/GitHub integration tooling, then assign the resulting ticket to the current user.
+1. Build a canonical fingerprint from the GitHub issue URL, repository and PR number, PR URL, branch, normalized title, and substantive scope.
+2. Search every applicable Linear connection for exact URL matches first and semantic matches second. Also inspect the PR's existing Linear links and attachments.
+3. If one matching Linear ticket exists, reuse it and verify it is assigned to the current Linear user.
+4. If several matching tickets exist, select the fuller ticket most directly linked by the PR, propose or apply the approved duplicate relations, and ingest nothing new.
+5. If the canonical ticket is unassigned or assigned to someone else, assign it to the current user unless another owner is clearly intentional.
+6. Only when the full duplicate check returns no match, create or request ingestion, assign the result, then re-query before processing another tracker for the same PR.
 
 If Linear tools are unavailable, continue the rest of the workflow and list the exact Linear checks that could not be completed.
 
 ## Step 5: Slack Intake
 
 Check recent Slack messages directed to the current user and recent threads where they participated. Look for requests that imply follow-up work.
+
+Before proposing a Slack-derived ticket, search the applicable GitHub and Linear connections for the same request, links, PR, customer, and substantive scope. Classify an already-tracked request as `No ticket` and link the canonical record instead of proposing another tracker.
 
 Classify each candidate:
 
