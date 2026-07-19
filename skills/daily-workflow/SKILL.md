@@ -11,10 +11,10 @@ Use this skill when the user asks to review or organize their daily workflow. Fi
 
 - Resolve the current user before taking action. Use `gh api user --jq .login` for GitHub, the current-user identity from Linear, and the current Slack profile when those services are available. Ask the user when an identity cannot be resolved.
 - Be human-in-the-loop. Propose new GitHub issues or Linear tickets before creating them from Slack messages or ambiguous context.
-- Prefer Linear MCP tools for Linear reads and writes. If unavailable, report the access needed; do not document raw Linear API token workarounds in this workflow.
+- Use `LINEAR_API_KEY` as the primary Linear credential when it is available. Run the bundled token-backed fetch for the initial snapshot; use the token for later Linear reads and approved writes without printing it. Use Linear MCP connections for additional workspaces not represented by the token, or as the fallback when the token is unavailable.
 - Prefer GitHub tools or `gh` for GitHub reads and writes.
 - Check Slack only when a Slack connector/tool is available. If unavailable, report that Slack intake could not be checked.
-- When multiple Linear or Slack connections are available, examine all of them and consider their results together unless the user specifies otherwise; do not treat one connection as the complete work queue by default.
+- When the token and one or more Linear connections are available, identify the token's workspace, query every additional workspace connection, and consider their results together unless the user specifies otherwise; do not treat one credential or connection as the complete work queue by default. Apply the same all-connections rule to Slack.
 - Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to the current user unless another owner is clearly intentional.
 - Maintain exactly one canonical GitHub issue and one canonical Linear ticket for each unit of work. Before any issue creation or Linear ingestion, search every applicable GitHub repository and configured Linear connection using the PR URL/number, linked issue URL, branch name, normalized title, and substantive keywords. Reuse and update an existing tracker even when its title differs. Never launch competing create/ingest operations for the same candidate in parallel. When duplicates already exist, preserve the fuller tracker most directly linked by the PR, mark the others duplicate, and close their redundant GitHub issues with links to the canonical records.
 - If a priority is set, the issue should not be in `triage`; set it to `todo` if no PR is open, `in progress` if a draft PR is open or a PR has been reviewed but no response to the review has been posted, and `under review` if the PR is ready but no review has been submitted. For issues in `under review`, suggest potential reviewers if none are assigned, but do not request a review unless asked to.
@@ -58,13 +58,13 @@ This skill packages its executable helpers in `scripts/`. Run them relative to t
 
 ## Fast Report Path
 
-Start the initial report with the unified generator. When Linear is being read through configured tools, skip its local token mode:
+Start the initial report with the unified generator. When `LINEAR_API_KEY` is available, always let the generator use it:
 
 ```bash
-python3 scripts/daily-workflow-fetch.py --skip-linear --output json
+python3 scripts/daily-workflow-fetch.py --output json
 ```
 
-At the same time, start one batched assigned-ticket read for every configured Linear connection and one recent-request search for every configured Slack connection. Do not wait for one source before starting another. Reuse those result sets throughout the initial report instead of repeating identity, list, or per-item reads.
+Use `--skip-linear` only when `LINEAR_API_KEY` is absent and Linear will be read exclusively through configured tools. At the same time, identify the token's Linear workspace, start one batched assigned-ticket read for every configured Linear connection that represents a different workspace, and start one recent-request search for every configured Slack connection. Do not wait for one source before starting another. Reuse those result sets throughout the initial report instead of repeating identity, list, or per-item reads.
 
 Build and emit the main report from those shared snapshots. Include every tied item at the highest active Linear priority; never apply an arbitrary count limit. Do not run `check_ready_prs.py`, the collector's `full` profile, fetch check names or comment bodies, follow blocker chains beyond a candidate action item, or make per-PR detail reads first. If a source is slower or unavailable, report that source's status without rerunning the completed sources. During the following issue-resolution phase, fetch only the target item's full context and immediately re-fetch it before any mutation.
 
@@ -185,7 +185,7 @@ When active unprioritized tickets exist:
 
 Fetch the current user's incomplete assigned Linear tickets. Sort first by priority: `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`. Select every actionable ticket tied at the first priority level that contains actionable work. Within that cohort, sort overdue tickets first, then by ascending due date, then place tickets without a due date last. Keep lower-priority tickets out of the main report; they remain available for the later walkthrough.
 
-When using Linear MCP tools, request the current user's issues and filter out completed, canceled, duplicate, and archived work. Inspect blocked states, `Blocked` labels, and active blocker relations before building the actionable queue. Replace a blocked candidate with its highest-ranked active blocker when that blocker is actionable by the current user; follow nested blocker relations recursively. Do not let a later deadline at the same priority jump ahead merely because the earlier ticket is blocked.
+For every Linear source, whether token-backed or MCP-backed, request the current user's issues and filter out completed, canceled, duplicate, and archived work. Inspect blocked states, `Blocked` labels, and active blocker relations before building the actionable queue. Replace a blocked candidate with its highest-ranked active blocker when that blocker is actionable by the current user; follow nested blocker relations recursively. Do not let a later deadline at the same priority jump ahead merely because the earlier ticket is blocked.
 
 For each ticket in the selected cohort, report:
 
