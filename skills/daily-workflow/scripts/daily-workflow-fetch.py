@@ -3,6 +3,7 @@
 Fetch daily workflow data from Linear and GitHub APIs.
 
 Generates an ACTION-ORIENTED checklist with explicit instructions for each item:
+- PRs awaiting the current user's review
 - Linear tickets with investigation/fix commands
 - Ready PRs with review status and ping instructions
 - Draft PRs with specific fix/test/mark-ready commands
@@ -10,8 +11,8 @@ Generates an ACTION-ORIENTED checklist with explicit instructions for each item:
 Usage:
     python daily-workflow-fetch.py [--github-user USER] [--output FORMAT]
 
-When --github-user is omitted, the script resolves the authenticated GitHub
-CLI user. The generated report may contain private work data; keep it local.
+When --github-user is omitted, the script uses the authenticated GitHub CLI
+user. The generated report may contain private work data; keep it local.
 
 Environment variables:
     LINEAR_API_KEY - Linear API key
@@ -19,10 +20,12 @@ Environment variables:
 """
 
 import argparse
+import concurrent.futures
+import importlib.util
 import json
 import os
+import pathlib
 import re
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -168,6 +171,11 @@ class GitHubPR:
     has_evidence: bool = False
     days_in_ready: int = 0
     is_content_only: bool = False  # docs, skills, config files
+    mergeable: str = "UNKNOWN"
+    merge_state_status: str = "UNKNOWN"
+    review_summary: str = "unknown"
+    awaiting_user_review: bool = False
+    linked_issues: list[ExternalLink] = field(default_factory=list)
 
     @property
     def is_stale(self) -> bool:
@@ -189,6 +197,10 @@ class GitHubPR:
         return self.is_draft and self.ci_status == "failure"
 
     @property
+    def needs_conflict_fix(self) -> bool:
+        return self.mergeable == "CONFLICTING" or self.merge_state_status == "DIRTY"
+
+    @property
     def needs_evidence(self) -> bool:
         return (
             self.is_draft
@@ -197,10 +209,37 @@ class GitHubPR:
             and self.ci_status != "failure"
         )
 
+    @property
+    def requires_action(self) -> bool:
+        if self.awaiting_user_review:
+            return not self.is_draft
+        if not self.is_draft:
+            return self.has_approvals or self.is_stale
+        return bool(
+            self.needs_conflict_fix
+            or self.needs_ci_fix
+            or self.unresolved_threads
+            or self.needs_evidence
+            or self.can_mark_ready
+        )
+
     def get_action_instructions(self) -> str:
         """Generate specific action instructions for this PR."""
         lines = []
         repo_short = self.repo.split("/")[-1]
+
+        if self.awaiting_user_review:
+            if self.is_draft:
+                lines.append("**Action**: Wait for the author to mark this PR ready")
+            elif self.ci_status == "failure":
+                lines.append("**Action**: Ask the author to fix failing CI before review")
+            elif self.needs_conflict_fix:
+                lines.append("**Action**: Ask the author to resolve merge conflicts before review")
+            elif not self.has_evidence and not self.is_content_only:
+                lines.append("**Action**: Review now and verify live evidence with the author")
+            else:
+                lines.append("**Action**: Review now")
+            return "\n".join(lines)
 
         if not self.is_draft:
             # Ready PR
@@ -208,13 +247,21 @@ class GitHubPR:
                 lines.append(f"**Action**: Ping reviewers (stale {self.days_in_ready} days)")
                 lines.append("**Status**: Add to summary as 'needs reviewer ping'")
             elif self.has_approvals:
-                lines.append("**Action**: None needed - approved and awaiting merge")
+                lines.append("**Action**: Merge the approved PR")
             else:
                 lines.append("**Action**: None needed - awaiting review")
             return "\n".join(lines)
 
         # Draft PR
-        if self.needs_ci_fix:
+        if self.needs_conflict_fix:
+            lines.append("**Action**: Resolve merge conflicts")
+            lines.append("**Commands**:")
+            lines.append("```bash")
+            lines.append(f"gh pr checkout {self.number} --repo {self.repo}")
+            lines.append("# Merge or rebase the current base branch, resolve conflicts, and push")
+            lines.append("```")
+
+        elif self.needs_ci_fix:
             lines.append("**Action**: Fix failing CI/tests")
             lines.append("**Commands**:")
             lines.append("```bash")
@@ -273,53 +320,169 @@ def linear_ticket_sort_key(ticket: LinearTicket) -> tuple[int, int, str, str]:
     )
 
 
+def draft_pr_sort_key(pr: GitHubPR) -> tuple[int, str, int]:
+    """Put draft PRs with the most immediate unblock action first."""
+    rank = (
+        0
+        if pr.needs_conflict_fix
+        else 1
+        if pr.needs_ci_fix
+        else 2
+        if pr.unresolved_threads > 0
+        else 3
+        if pr.needs_evidence
+        else 4
+    )
+    return rank, pr.repo, pr.number
+
+
 @dataclass
 class WorkflowChecklist:
     linear_tickets: list[LinearTicket] = field(default_factory=list)
+    review_requests: list[GitHubPR] = field(default_factory=list)
     ready_prs: list[GitHubPR] = field(default_factory=list)
     draft_prs: list[GitHubPR] = field(default_factory=list)
+    github_metadata: dict[str, Any] = field(default_factory=dict)
     fetch_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def highest_priority_linear_tickets(self) -> list[LinearTicket]:
+        """Return every actionable ticket tied at the highest active priority."""
+        tickets = sorted(
+            (ticket for ticket in self.linear_tickets if ticket.is_actionable),
+            key=linear_ticket_sort_key,
+        )
+        if not tickets:
+            return []
+        highest_rank = linear_ticket_sort_key(tickets[0])[0]
+        return [
+            ticket
+            for ticket in tickets
+            if linear_ticket_sort_key(ticket)[0] == highest_rank
+        ]
+
+    def action_items(self) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for pr in self.review_requests:
+            if pr.requires_action:
+                items.append(
+                    {
+                        "kind": "review_request",
+                        "title": f"{pr.repo}#{pr.number} — {pr.title}",
+                        "url": pr.url,
+                        "priority": None,
+                        "priority_label": None,
+                        "summary": pr.get_action_instructions().splitlines()[0]
+                        .removeprefix("**Action**: "),
+                        "related_issues": [
+                            {"title": issue.title, "url": issue.url}
+                            for issue in pr.linked_issues
+                        ],
+                    }
+                )
+        for ticket in self.highest_priority_linear_tickets():
+            items.append(
+                {
+                    "kind": "linear",
+                    "title": f"{ticket.identifier} — {ticket.title}",
+                    "url": ticket.url,
+                    "priority": ticket.priority,
+                    "priority_label": ticket.priority_label,
+                    "summary": ticket.get_action_instructions().splitlines()[0]
+                    .removeprefix("**Action**: "),
+                    "related_issues": [
+                        {"title": link.title, "url": link.url}
+                        for link in ticket.github_links
+                    ],
+                }
+            )
+        for pr in self.ready_prs + sorted(self.draft_prs, key=draft_pr_sort_key):
+            if pr.requires_action:
+                items.append(
+                    {
+                        "kind": "authored_pr",
+                        "title": f"{pr.repo}#{pr.number} — {pr.title}",
+                        "url": pr.url,
+                        "priority": None,
+                        "priority_label": None,
+                        "summary": pr.get_action_instructions().splitlines()[0]
+                        .removeprefix("**Action**: "),
+                        "related_issues": [
+                            {"title": issue.title, "url": issue.url}
+                            for issue in pr.linked_issues
+                        ],
+                    }
+                )
+        return items
 
     def to_markdown(self) -> str:
         lines = ["# Daily Workflow - Action Items", ""]
         lines.append(f"*Generated: {self.fetch_time.strftime('%Y-%m-%d %H:%M UTC')}*")
         lines.append("")
-        lines.append("Work through each item in order. Execute the commands provided.")
+        lines.append(
+            "This report lists the current actionable GitHub work and every Linear "
+            "ticket tied at the highest active priority."
+        )
+        lines.append("")
+        lines.append("## Action Items")
+        lines.append("")
+        actions = self.action_items()
+        if not actions:
+            lines.append("✅ No current action items.")
+        else:
+            for index, item in enumerate(actions, start=1):
+                lines.append(
+                    f"{index}. [{item['title']}]({item['url']})"
+                    + (
+                        f" — {item['priority_label']} ({item['priority']})"
+                        if item["kind"] == "linear"
+                        else ""
+                    )
+                    + f" — {item['summary']}"
+                )
+                if item["related_issues"]:
+                    related = ", ".join(
+                        f"[{issue['title'] or issue['url']}]({issue['url']})"
+                        for issue in item["related_issues"]
+                    )
+                    lines.append(f"   Related: {related}")
         lines.append("")
 
-        # Phase 1: Linear Tickets
+        # Phase 1: PRs awaiting the user's review
         lines.append("---")
-        lines.append("## Phase 1: Linear Tickets")
+        lines.append("## Phase 1: PRs Awaiting Review")
         lines.append("")
-        if not self.linear_tickets:
+        if not self.review_requests:
+            lines.append("✅ No PRs are waiting for your review.")
+        else:
+            for pr in self.review_requests:
+                lines.append(f"#### [{pr.repo}#{pr.number}]({pr.url}): {pr.title}")
+                lines.append("")
+                lines.append(pr.get_action_instructions())
+                lines.append("")
+
+        # Phase 2: Highest-priority Linear ticket cohort
+        highest_priority_tickets = self.highest_priority_linear_tickets()
+        lines.append("---")
+        lines.append("## Phase 2: Highest-Priority Linear Tickets")
+        lines.append("")
+        if not highest_priority_tickets:
             lines.append("✅ No open tickets assigned.")
         else:
-            # Group by priority
-            by_priority: dict[int, list[LinearTicket]] = {}
-            for t in self.linear_tickets:
-                by_priority.setdefault(t.priority, []).append(t)
-
-            # Linear priority: 1=Urgent, 2=High, 3=Medium, 4=Low, 0=No priority
-            # Sort so Urgent (1) comes first, No priority (0) comes last
-            def priority_sort_key(p: int) -> int:
-                return p if p > 0 else 99  # Move "No priority" (0) to end
-
-            for priority in sorted(by_priority.keys(), key=priority_sort_key):
-                tickets = sorted(by_priority[priority], key=linear_ticket_sort_key)
-                label = tickets[0].priority_label if tickets else "Unknown"
-                lines.append(f"### {label} Priority")
+            label = highest_priority_tickets[0].priority_label
+            value = highest_priority_tickets[0].priority
+            lines.append(f"### {label} Priority ({value})")
+            lines.append("")
+            for t in highest_priority_tickets:
+                lines.append(f"#### [{t.identifier}]({t.url}): {t.title}")
+                lines.append(f"**State**: {t.state}")
+                lines.append(f"**Due**: {t.due_date or 'No due date'}")
                 lines.append("")
-                for t in tickets:
-                    lines.append(f"#### [{t.identifier}]({t.url}): {t.title}")
-                    lines.append(f"**State**: {t.state}")
-                    lines.append(f"**Due**: {t.due_date or 'No due date'}")
-                    lines.append("")
-                    lines.append(t.get_action_instructions())
-                    lines.append("")
+                lines.append(t.get_action_instructions())
+                lines.append("")
 
-        # Phase 2: Ready PRs
+        # Phase 3: Ready PRs
         lines.append("---")
-        lines.append("## Phase 2: Ready PRs")
+        lines.append("## Phase 3: Ready PRs")
         lines.append("")
         if not self.ready_prs:
             lines.append("✅ No ready PRs to manage.")
@@ -331,20 +494,20 @@ class WorkflowChecklist:
                 lines.append(pr.get_action_instructions())
                 lines.append("")
 
-        # Phase 3: Draft PRs
+        # Phase 4: Draft PRs
         lines.append("---")
-        lines.append("## Phase 3: Draft PRs")
+        lines.append("## Phase 4: Draft PRs")
         lines.append("")
         if not self.draft_prs:
             lines.append("✅ No draft PRs to work on.")
         else:
-            # Order by action type: fix CI first, then evidence, then mark ready
-            ordered = sorted(self.draft_prs, key=lambda p: (
-                0 if p.needs_ci_fix else (1 if p.unresolved_threads > 0 else (2 if p.needs_evidence else 3))
-            ))
+            # Order by action type: conflicts, CI, review threads, evidence, ready.
+            ordered = sorted(self.draft_prs, key=draft_pr_sort_key)
 
             for pr in ordered:
-                if pr.needs_ci_fix:
+                if pr.needs_conflict_fix:
+                    icon = "💥"
+                elif pr.needs_ci_fix:
                     icon = "🔴"
                 elif pr.unresolved_threads > 0:
                     icon = "🟠"
@@ -361,9 +524,40 @@ class WorkflowChecklist:
         return "\n".join(lines)
 
     def to_json(self) -> str:
+        highest_priority_tickets = self.highest_priority_linear_tickets()
         return json.dumps(
             {
                 "fetch_time": self.fetch_time.isoformat(),
+                "github_metadata": self.github_metadata,
+                "highest_linear_priority": (
+                    {
+                        "value": highest_priority_tickets[0].priority,
+                        "label": highest_priority_tickets[0].priority_label,
+                    }
+                    if highest_priority_tickets
+                    else None
+                ),
+                "action_items": self.action_items(),
+                "review_requests": [
+                    {
+                        "repo": pr.repo,
+                        "number": pr.number,
+                        "title": pr.title,
+                        "url": pr.url,
+                        "is_draft": pr.is_draft,
+                        "ci_status": pr.ci_status,
+                        "mergeable": pr.mergeable,
+                        "merge_state_status": pr.merge_state_status,
+                        "review_summary": pr.review_summary,
+                        "has_evidence": pr.has_evidence,
+                        "linked_issues": [
+                            {"title": issue.title, "url": issue.url}
+                            for issue in pr.linked_issues
+                        ],
+                        "action_instructions": pr.get_action_instructions(),
+                    }
+                    for pr in self.review_requests
+                ],
                 "linear_tickets": [
                     {
                         "identifier": t.identifier,
@@ -382,7 +576,7 @@ class WorkflowChecklist:
                         ],
                         "action_instructions": t.get_action_instructions(),
                     }
-                    for t in self.linear_tickets
+                    for t in highest_priority_tickets
                 ],
                 "ready_prs": [
                     {
@@ -390,9 +584,19 @@ class WorkflowChecklist:
                         "number": pr.number,
                         "title": pr.title,
                         "url": pr.url,
+                        "ci_status": pr.ci_status,
+                        "mergeable": pr.mergeable,
+                        "merge_state_status": pr.merge_state_status,
+                        "review_summary": pr.review_summary,
+                        "has_evidence": pr.has_evidence,
+                        "unresolved_threads": pr.unresolved_threads,
                         "has_approvals": pr.has_approvals,
                         "days_in_ready": pr.days_in_ready,
                         "is_stale": pr.is_stale,
+                        "linked_issues": [
+                            {"title": issue.title, "url": issue.url}
+                            for issue in pr.linked_issues
+                        ],
                         "action_instructions": pr.get_action_instructions(),
                     }
                     for pr in self.ready_prs
@@ -405,11 +609,18 @@ class WorkflowChecklist:
                         "url": pr.url,
                         "ci_status": pr.ci_status,
                         "ci_failures": pr.ci_failures,
+                        "mergeable": pr.mergeable,
+                        "merge_state_status": pr.merge_state_status,
+                        "review_summary": pr.review_summary,
                         "unresolved_threads": pr.unresolved_threads,
                         "has_evidence": pr.has_evidence,
                         "needs_ci_fix": pr.needs_ci_fix,
                         "needs_evidence": pr.needs_evidence,
                         "can_mark_ready": pr.can_mark_ready,
+                        "linked_issues": [
+                            {"title": issue.title, "url": issue.url}
+                            for issue in pr.linked_issues
+                        ],
                         "action_instructions": pr.get_action_instructions(),
                     }
                     for pr in self.draft_prs
@@ -417,34 +628,6 @@ class WorkflowChecklist:
             },
             indent=2,
         )
-
-
-def run_gh(args: list[str]) -> dict[str, Any] | list[Any] | str | int:
-    """Run gh CLI command and return parsed JSON or raw output."""
-    result = subprocess.run(
-        ["gh"] + args,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        print(f"Error running gh {' '.join(args)}: {result.stderr}", file=sys.stderr)
-        return {}
-    output = result.stdout.strip()
-    if not output:
-        return {}
-    try:
-        return json.loads(output)
-    except json.JSONDecodeError:
-        # Return raw string for non-JSON output (like jq scalar results)
-        return output
-
-
-def resolve_github_username() -> str | None:
-    """Return the login for the authenticated GitHub CLI user, if available."""
-    result = run_gh(["api", "user", "--jq", ".login"])
-    if isinstance(result, str) and result:
-        return result
-    return None
 
 
 def linear_node_is_blocked(node: dict[str, Any]) -> bool:
@@ -579,257 +762,102 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
     return sorted(tickets, key=linear_ticket_sort_key)
 
 
-def extract_markdown_section(body: str, heading: str) -> str:
-    """Extract the content of a markdown H2 section."""
-    pattern = rf'^##\s+{re.escape(heading)}\s*\n(.*?)(?=^##\s+|\Z)'
-    match = re.search(pattern, body, re.MULTILINE | re.DOTALL)
-    if not match:
-        return ""
-    return match.group(1).strip()
+def _load_github_collector() -> Any:
+    path = pathlib.Path(__file__).with_name("gather_github_evidence.py")
+    spec = importlib.util.spec_from_file_location("daily_workflow_github", path)
+    if not spec or not spec.loader:
+        raise RuntimeError(f"Unable to load GitHub collector from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def evidence_section_has_live_run(evidence: str) -> bool:
-    """Return True only when Evidence shows a real live run."""
-    if not evidence.strip():
-        return False
+def _parse_github_datetime(value: str | None) -> datetime:
+    if not value:
+        return datetime.now(timezone.utc)
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
-    lowered = evidence.lower()
-    blocked_indicators = (
-        "blocked",
-        "unavailable",
-        "manual verification",
-        "manual qa",
-        "pending manual",
-        "requires manual verification",
-        "still requires manual verification",
-        "could not",
-        "unable to",
-        "not run",
-        "not tested",
+
+def _github_pr_from_snapshot(
+    item: dict[str, Any], *, awaiting_user_review: bool = False
+) -> GitHubPR:
+    ready_at_value = item.get("ready_at")
+    ready_at = _parse_github_datetime(ready_at_value) if ready_at_value else None
+    days_in_ready = (
+        max(0, (datetime.now(timezone.utc) - ready_at).days) if ready_at else 0
     )
-    if any(indicator in lowered for indicator in blocked_indicators):
-        return False
-
-    has_screenshot = "![" in evidence or "<img" in lowered
-    has_prompt = bool(re.search(r'^\s*(\$|>)\s+\S', evidence, re.MULTILINE))
-    has_code_block = "```" in evidence
-    has_output_indicators = any(
-        indicator in lowered
-        for indicator in ("output:", "result:", "✓", "✅", "passed", "success")
-    )
-    has_command_output = has_prompt or (has_code_block and has_output_indicators)
-    return has_screenshot or has_command_output
-
-
-def _build_pr_graphql_fragment(alias: str, owner: str, repo: str, number: int) -> str:
-    """Build a GraphQL fragment for fetching a single PR's details."""
-    # Use single line format to avoid shell escaping issues
-    return (
-        f'{alias}: repository(owner: "{owner}", name: "{repo}") {{ '
-        f'pullRequest(number: {number}) {{ '
-        f'number title url body isDraft createdAt headRefName headRefOid '
-        f'files(first: 100) {{ nodes {{ path }} }} '
-        f'reviewThreads(first: 100) {{ nodes {{ isResolved comments(first: 1) {{ nodes {{ body }} }} }} }} '
-        f'reviews(first: 50) {{ nodes {{ state }} }} '
-        f'commits(last: 1) {{ nodes {{ commit {{ statusCheckRollup {{ contexts(first: 50) {{ nodes {{ ... on CheckRun {{ name conclusion }} }} }} }} }} }} }} '
-        f'timelineItems(first: 100, itemTypes: [READY_FOR_REVIEW_EVENT]) {{ nodes {{ ... on ReadyForReviewEvent {{ createdAt }} }} }} '
-        f'}} }}'
-    )
-
-
-def _parse_pr_from_graphql(repo_name: str, pr_data: dict[str, Any]) -> GitHubPR | None:
-    """Parse a PR from GraphQL response data."""
-    if not pr_data or not pr_data.get("pullRequest"):
-        return None
-
-    pr = pr_data["pullRequest"]
-    number = pr["number"]
-    pr_body = pr.get("body") or ""
-
-    # Extract changed files
-    files_nodes = pr.get("files", {}).get("nodes", [])
-    changed_files = [f.get("path", "") for f in files_nodes if f]
-
-    # Detect content-only PRs
-    content_extensions = {'.md', '.txt', '.rst', '.json', '.yaml', '.yml', '.toml'}
-    content_dirs = {'docs/', 'skills/', '.github/', 'examples/'}
-    is_content_only = False
-    if changed_files:
-        is_content_only = all(
-            any(f.endswith(ext) for ext in content_extensions) or
-            any(f.startswith(d) for d in content_dirs)
-            for f in changed_files
-        )
-
-    # Parse CI status from statusCheckRollup
-    ci_status = "unknown"
-    ci_failures: list[str] = []
-    commits = pr.get("commits", {}).get("nodes", [])
-    if commits:
-        rollup = commits[0].get("commit", {}).get("statusCheckRollup")
-        if rollup:
-            contexts = rollup.get("contexts", {}).get("nodes", [])
-            conclusions = [c.get("conclusion") for c in contexts if c]
-            ci_failures = [
-                c.get("name", "unknown")
-                for c in contexts
-                if c and c.get("conclusion") == "FAILURE"
-            ]
-            if not conclusions:
-                ci_status = "pending"
-            elif all(c in ("SUCCESS", "SKIPPED", None) for c in conclusions):
-                ci_status = "success"
-            elif "FAILURE" in conclusions:
-                ci_status = "failure"
-            else:
-                ci_status = "pending"
-
-    # Parse review threads
-    unresolved = 0
-    unresolved_details: list[str] = []
-    threads = pr.get("reviewThreads", {}).get("nodes", [])
-    for t in threads:
-        if t and not t.get("isResolved", True):
-            unresolved += 1
-            comments = t.get("comments", {}).get("nodes", [])
-            if comments:
-                body = comments[0].get("body", "")[:100]
-                unresolved_details.append(body)
-
-    # Parse approvals
-    reviews = pr.get("reviews", {}).get("nodes", [])
-    has_approvals = any(r and r.get("state") == "APPROVED" for r in reviews)
-
-    # Check for live evidence in the dedicated ## Evidence section.
-    # A ## Testing section or an empty heading is not enough.
-    evidence_section = extract_markdown_section(pr_body, "Evidence")
-    has_evidence = evidence_section_has_live_run(evidence_section)
-
-    # Parse ready_for_review date
-    ready_at = None
-    days_in_ready = 0
-    is_draft = pr.get("isDraft", False)
-    if not is_draft:
-        timeline_items = pr.get("timelineItems", {}).get("nodes", [])
-        if timeline_items:
-            last_ready = timeline_items[-1].get("createdAt", "")
-            if last_ready:
-                try:
-                    ready_at = datetime.fromisoformat(last_ready.replace("Z", "+00:00"))
-                    days_in_ready = (datetime.now(timezone.utc) - ready_at).days
-                except ValueError:
-                    pass
-
-    created_at = datetime.fromisoformat(pr["createdAt"].replace("Z", "+00:00"))
-
+    ci_map = {
+        "passing": "success",
+        "failing": "failure",
+        "pending": "pending",
+        "missing": "unknown",
+    }
+    unresolved_threads = item.get("unresolved_review_threads") or []
+    linked_issues = [
+        ExternalLink(title=issue.get("title") or "", url=issue.get("url") or "")
+        for issue in item.get("closing_issues") or []
+        if issue.get("url")
+    ]
     return GitHubPR(
-        repo=repo_name,
-        number=number,
-        title=pr["title"],
-        url=pr["url"],
-        is_draft=is_draft,
-        created_at=created_at,
-        head_branch=pr.get("headRefName", ""),
+        repo=item.get("repository") or "unknown/unknown",
+        number=item.get("number") or 0,
+        title=item.get("title") or "Untitled PR",
+        url=item.get("url") or "",
+        is_draft=bool(item.get("is_draft")),
+        created_at=_parse_github_datetime(item.get("created_at")),
+        head_branch=item.get("head_ref") or "",
         ready_at=ready_at,
-        ci_status=ci_status,
-        ci_failures=ci_failures,
-        has_approvals=has_approvals,
-        unresolved_threads=unresolved,
-        unresolved_thread_details=unresolved_details,
-        has_evidence=has_evidence,
+        ci_status=ci_map.get((item.get("ci") or {}).get("summary"), "unknown"),
+        ci_failures=[
+            check.get("name") or "unknown"
+            for check in (item.get("ci") or {}).get("failing") or []
+        ],
+        has_approvals=item.get("review_summary") == "approved",
+        unresolved_threads=len(unresolved_threads),
+        unresolved_thread_details=[
+            (thread.get("comments") or [{}])[0].get("body", "")[:100]
+            for thread in unresolved_threads
+            if thread.get("comments")
+        ],
+        has_evidence=bool((item.get("live_evidence") or {}).get("likely_genuine")),
         days_in_ready=days_in_ready,
-        is_content_only=is_content_only,
+        is_content_only=bool(item.get("content_only_likely")),
+        mergeable=item.get("mergeable") or "UNKNOWN",
+        merge_state_status=item.get("merge_state_status") or "UNKNOWN",
+        review_summary=item.get("review_summary") or "unknown",
+        awaiting_user_review=awaiting_user_review,
+        linked_issues=linked_issues,
     )
 
 
-def _fetch_single_pr_graphql(repo_name: str, number: int) -> GitHubPR | None:
-    """Fetch a single PR using GraphQL. Fallback for batches that fail."""
-    owner, repo = repo_name.split("/")
-    query = "query { " + _build_pr_graphql_fragment("pr", owner, repo, number) + " }"
-    result = run_gh(["api", "graphql", "-f", f"query={query}"])
-
-    if not isinstance(result, dict) or "data" not in result:
-        return None
-
-    pr_data = result.get("data", {}).get("pr")
-    if pr_data:
-        return _parse_pr_from_graphql(repo_name, pr_data)
-    return None
+def fetch_github_context(
+    user: str,
+) -> tuple[list[GitHubPR], list[GitHubPR], list[GitHubPR], dict[str, Any]]:
+    collector = _load_github_collector()
+    snapshot = collector.gather(user, user, 100, False, "report")
+    review_requests = [
+        _github_pr_from_snapshot(item, awaiting_user_review=True)
+        for item in snapshot["prs_awaiting_review"]
+    ]
+    authored = [
+        _github_pr_from_snapshot(item) for item in snapshot["authored_open_prs"]
+    ]
+    ready_prs = [pr for pr in authored if not pr.is_draft]
+    draft_prs = [pr for pr in authored if pr.is_draft]
+    ready_prs.sort(key=lambda pr: (pr.repo, pr.number))
+    draft_prs.sort(key=draft_pr_sort_key)
+    metadata = {
+        "viewer": snapshot.get("viewer"),
+        "profile": snapshot.get("profile"),
+        "api_requests": snapshot.get("api_requests"),
+        "warnings": snapshot.get("warnings") or [],
+    }
+    return review_requests, ready_prs, draft_prs, metadata
 
 
 def fetch_github_prs(user: str) -> tuple[list[GitHubPR], list[GitHubPR]]:
-    """Fetch GitHub PRs authored by user using batched GraphQL queries."""
-    # Fetch all open PRs (basic info only)
-    prs_data = run_gh(
-        [
-            "search",
-            "prs",
-            "--author",
-            user,
-            "--state",
-            "open",
-            "--json",
-            "repository,number",
-            "--limit",
-            "100",
-        ]
-    )
-
-    if not isinstance(prs_data, list):
-        return [], []
-
-    ready_prs: list[GitHubPR] = []
-    draft_prs: list[GitHubPR] = []
-
-    # Build batched GraphQL query for all PRs
-    # Use smaller batches (10) to reduce impact of permission errors
-    batch_size = 10
-    for batch_start in range(0, len(prs_data), batch_size):
-        batch = prs_data[batch_start:batch_start + batch_size]
-
-        # Build query fragments for this batch
-        fragments = []
-        pr_map: dict[str, tuple[str, int]] = {}  # alias -> (repo_name, number)
-        for i, pr_info in enumerate(batch):
-            repo_name = pr_info["repository"]["nameWithOwner"]
-            number = pr_info["number"]
-            owner, repo = repo_name.split("/")
-            alias = f"pr_{i}"
-            pr_map[alias] = (repo_name, number)
-            fragments.append(_build_pr_graphql_fragment(alias, owner, repo, number))
-            print(f"  Processing {repo_name}#{number}...", file=sys.stderr)
-
-        # Execute batched query
-        query = "query { " + " ".join(fragments) + " }"
-        result = run_gh(["api", "graphql", "-f", f"query={query}"])
-
-        if isinstance(result, dict) and "data" in result:
-            # Parse results from successful batch
-            data = result["data"]
-            for alias, (repo_name, _) in pr_map.items():
-                pr_data = data.get(alias)
-                if pr_data:
-                    pr = _parse_pr_from_graphql(repo_name, pr_data)
-                    if pr:
-                        if pr.is_draft:
-                            draft_prs.append(pr)
-                        else:
-                            ready_prs.append(pr)
-        else:
-            # Batch failed - fall back to individual queries
-            print(f"  Batch failed, fetching individually...", file=sys.stderr)
-            for alias, (repo_name, number) in pr_map.items():
-                pr = _fetch_single_pr_graphql(repo_name, number)
-                if pr:
-                    if pr.is_draft:
-                        draft_prs.append(pr)
-                    else:
-                        ready_prs.append(pr)
-
-    # Sort by repo name and PR number for consistent output
-    ready_prs.sort(key=lambda p: (p.repo, p.number))
-    draft_prs.sort(key=lambda p: (p.repo, p.number))
-
+    """Compatibility wrapper around the shared batched report collector."""
+    _, ready_prs, draft_prs, _ = fetch_github_context(user)
     return ready_prs, draft_prs
 
 
@@ -850,31 +878,34 @@ def main():
     args = parser.parse_args()
 
     checklist = WorkflowChecklist()
+    linear_key = None if args.skip_linear else os.environ.get("LINEAR_API_KEY")
+    if not args.skip_linear and not linear_key:
+        print("LINEAR_API_KEY not set, skipping Linear", file=sys.stderr)
 
-    # Fetch Linear tickets
-    if not args.skip_linear:
-        linear_key = os.environ.get("LINEAR_API_KEY")
+    tasks: dict[str, concurrent.futures.Future[Any]] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         if linear_key:
             print("Fetching Linear tickets...", file=sys.stderr)
-            checklist.linear_tickets = fetch_linear_tickets(linear_key)
-            print(f"  Found {len(checklist.linear_tickets)} tickets", file=sys.stderr)
-        else:
-            print("LINEAR_API_KEY not set, skipping Linear", file=sys.stderr)
+            tasks["linear"] = executor.submit(fetch_linear_tickets, linear_key)
+        if not args.skip_github:
+            github_user = args.github_user or "@me"
+            print(f"Fetching GitHub report context for {github_user}...", file=sys.stderr)
+            tasks["github"] = executor.submit(fetch_github_context, github_user)
 
-    # Fetch GitHub PRs
-    if not args.skip_github:
-        github_user = args.github_user or resolve_github_username()
-        if github_user:
-            print(f"Fetching GitHub PRs for {github_user}...", file=sys.stderr)
-            checklist.ready_prs, checklist.draft_prs = fetch_github_prs(github_user)
+        if "linear" in tasks:
+            checklist.linear_tickets = tasks["linear"].result()
+            print(f"  Found {len(checklist.linear_tickets)} tickets", file=sys.stderr)
+        if "github" in tasks:
+            (
+                checklist.review_requests,
+                checklist.ready_prs,
+                checklist.draft_prs,
+                checklist.github_metadata,
+            ) = tasks["github"].result()
             print(
-                f"  Found {len(checklist.ready_prs)} ready, "
+                f"  Found {len(checklist.review_requests)} review requests, "
+                f"{len(checklist.ready_prs)} ready, "
                 f"{len(checklist.draft_prs)} draft",
-                file=sys.stderr,
-            )
-        else:
-            print(
-                "Unable to resolve a GitHub user; authenticate gh or pass --github-user",
                 file=sys.stderr,
             )
 

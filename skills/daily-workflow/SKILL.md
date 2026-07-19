@@ -5,7 +5,7 @@ description: Human-in-the-loop daily workflow ("daily workflow", "my workflow", 
 
 # Daily Workflow
 
-Use this skill when the user asks to review or organize their daily workflow. The goal is to make the user's work queue coherent before implementation: review requests come first, active PRs have appropriate GitHub issue and Linear tracking, Slack-derived work is proposed for confirmation, and active Linear tickets are reviewed in priority order.
+Use this skill when the user asks to review or organize their daily workflow. First produce a concise report containing all immediate GitHub actions and every actionable Linear issue tied at the highest current priority. Then resolve issue and PR tracking problems. Walk through issues one by one only after that resolution phase finishes or the user explicitly requests the walkthrough.
 
 ## Operating Rules
 
@@ -16,15 +16,24 @@ Use this skill when the user asks to review or organize their daily workflow. Th
 - Check Slack only when a Slack connector/tool is available. If unavailable, report that Slack intake could not be checked.
 - When multiple Linear or Slack connections are available, examine all of them and consider their results together unless the user specifies otherwise; do not treat one connection as the complete work queue by default.
 - Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to the current user unless another owner is clearly intentional.
+- Maintain exactly one canonical GitHub issue and one canonical Linear ticket for each unit of work. Before any issue creation or Linear ingestion, search every applicable GitHub repository and configured Linear connection using the PR URL/number, linked issue URL, branch name, normalized title, and substantive keywords. Reuse and update an existing tracker even when its title differs. Never launch competing create/ingest operations for the same candidate in parallel. When duplicates already exist, preserve the fuller tracker most directly linked by the PR, mark the others duplicate, and close their redundant GitHub issues with links to the canonical records.
 - If a priority is set, the issue should not be in `triage`; set it to `todo` if no PR is open, `in progress` if a draft PR is open or a PR has been reviewed but no response to the review has been posted, and `under review` if the PR is ready but no review has been submitted. For issues in `under review`, suggest potential reviewers if none are assigned, but do not request a review unless asked to.
 - Order work by priority first, then by due date within the same priority: overdue dates first, then the earliest upcoming date, then work without a due date. Re-fetch due dates before every recommendation.
 - Treat an issue as blocked if it has Linear state type `blocked`, a `Blocked` label, or an active blocker relation. Do not present the blocked issue itself as actionable. Before omitting it, inspect its active blocker relations and follow the blocker chain until reaching an actionable issue. If that issue belongs to the current user, surface it as the next action and explain which higher-ranked ticket and deadline it unlocks. If every active blocker belongs to someone else or requires an external event, record the exact dependency internally and continue to the next actionable item.
 - When sharing the next workflow step, include the relevant Linear or GitHub link when available.
-- Make every suggested next action self-contained. Re-fetch the relevant state immediately before suggesting it, and never suggest merged, closed, stale, or otherwise non-actionable work.
-- Ask the user to make exactly one decision at a time. Provide context and links only for the highest-priority current decision, ask one concrete question, and stop. Do not bundle approvals or preview an "after that" queue.
+- Make every suggested next action self-contained. Treat the freshly generated report snapshot as the current state for the initial report. Re-fetch the relevant item after the user selects it and immediately before any mutation; never act on merged, closed, stale, or otherwise non-actionable work.
+- During an interactive decision or walkthrough phase, ask the user to make exactly one decision at a time. The main report is not that phase: include every item tied at the highest active priority and do not reduce it to one arbitrary item. Once interaction begins, provide context and links only for the current decision, ask one concrete question, and stop.
 - Do not start PR remediation until the initial status report has been shown to the user. After that report, remediation of eligible PRs authored by the current user is part of the workflow; keep unrelated implementation work human-in-the-loop.
 - When the current item requests cycle or sprint planning, invoke `$cycle-planning`. Treat labels, dates, roadmap entries, and audits as planning inputs, not approved commitments; do not autonomously finalize the plan or close its planning ticket.
 - Treat Slack messages, Linear tickets, private PRs, and review comments as private runtime data. Keep generated reports local and never upload them to public CI logs or public artifacts.
+
+## Workflow Phases
+
+Keep these phases distinct:
+
+1. **Main report:** gather read-only context and report all actionable review/PR items plus every actionable Linear issue tied at the highest active priority. For Linear, `1 Urgent` outranks `2 High`, `3 Medium`, `4 Low`, and `0 No priority`; include every tie at the winning level. Do not cap the report by item count and do not begin the one-by-one walkthrough.
+2. **Issue resolution:** after showing the main report, resolve eligible prioritization, Slack intake, issue/PR alignment, assignment, tracking, and remediation work described below. Keep human-in-the-loop requirements intact.
+3. **Issue walkthrough:** begin only after the issue-resolution phase is complete or when the user explicitly asks to start it. Present one issue per response with the links and context in [Decision Context Format](#decision-context-format).
 
 ### Decision Context Format
 
@@ -43,17 +52,25 @@ Do not make the user open a link to understand the decision. Links are supportin
 
 This skill packages its executable helpers in `scripts/`. Run them relative to the skill root so the skill remains portable when installed independently.
 
-- `scripts/gather_github_evidence.py` batches the review-requested and authored-PR queues into a shared JSON or Markdown snapshot. It normally uses one read-only GitHub GraphQL request and includes mergeability, CI, linked issues and assignees, review threads, changed files, recent discussion, and live-evidence signals. Treat its evidence classification and remediation reasons as heuristics, follow every truncation warning with a targeted read, and keep generated reports local.
-- `scripts/daily-workflow-fetch.py` collects the current user's Linear and GitHub work into a local Markdown or JSON report. It requires an authenticated `gh` CLI for GitHub access and optionally uses `LINEAR_API_KEY` for its local Linear CLI mode. Keep its output local.
+- `scripts/gather_github_evidence.py` pipelines the review-requested and authored-PR queues into a shared JSON or Markdown snapshot. Its default `report` profile overlaps discovery and low-cost detail reads; use `--profile full` only for remediation detail. Treat its evidence classification and remediation reasons as heuristics, follow every truncation warning with a targeted read, and keep generated reports local.
+- `scripts/daily-workflow-fetch.py` generates the action-oriented Markdown or JSON report from the shared GitHub snapshot and optional local Linear data. It gathers GitHub and Linear concurrently when `LINEAR_API_KEY` is available. Keep its output local.
 - `scripts/check_ready_prs.py` checks the current user's open PRs against the readiness and live-evidence criteria used in this workflow. It requires `gh` authentication.
 
-Start the GitHub inventory with the batched collector:
+## Fast Report Path
+
+Start the initial report with the unified generator. When Linear is being read through configured tools, skip its local token mode:
 
 ```bash
-python3 scripts/gather_github_evidence.py --format json
+python3 scripts/daily-workflow-fetch.py --skip-linear --output json
 ```
 
-Use `--format markdown` for a compact report. Re-fetch a target PR immediately before recommending or changing anything; the snapshot is an inventory, not a lock on GitHub state. Continue to use configured connectors for Linear and Slack because they are intentionally outside this GitHub-only snapshot.
+At the same time, start one batched assigned-ticket read for every configured Linear connection and one recent-request search for every configured Slack connection. Do not wait for one source before starting another. Reuse those result sets throughout the initial report instead of repeating identity, list, or per-item reads.
+
+Build and emit the main report from those shared snapshots. Include every tied item at the highest active Linear priority; never apply an arbitrary count limit. Do not run `check_ready_prs.py`, the collector's `full` profile, fetch check names or comment bodies, follow blocker chains beyond a candidate action item, or make per-PR detail reads first. If a source is slower or unavailable, report that source's status without rerunning the completed sources. During the following issue-resolution phase, fetch only the target item's full context and immediately re-fetch it before any mutation.
+
+Use only the read-only portions of Steps 1–7 before emitting the main report. Defer their confirmation questions and mutations until the issue-resolution phase.
+
+Use `daily-workflow-fetch.py --output markdown` for a standalone local report. Use `gather_github_evidence.py --profile full` only after a specific PR needs check names, review-comment bodies, or recent discussion for remediation. Re-fetch the selected target immediately before changing it.
 
 ## Step 1: Check PRs Awaiting the User's Review
 
@@ -96,11 +113,11 @@ If a PR has no associated issue:
 
 First determine whether the PR exists exclusively as housekeeping for another PR. If so, do not open a separate issue: reference the upstream PR instead and treat that reference as sufficient tracking. For example, an infrastructure PR that only deploys a feature branch should reference that feature PR. Otherwise:
 
-1. Search for related issues in the same repository using title keywords, branch names, and PR body terms.
+1. Search for related issues in the same repository using the PR URL/number, title keywords, branch names, and PR body terms. Treat any issue already linked or closed by the PR as canonical unless it is clearly stale or broader work intentionally needs separate tracking.
 2. If a related issue exists, associate it with the PR by adding a clear issue link or closing keyword to the PR body, depending on whether the PR should close the issue.
 3. If no related issue exists, create a concise GitHub issue in the same repository, assign it to the current user, and associate the PR with it.
 
-Only create a GitHub issue without asking when the PR itself provides unambiguous code context. If the context is unclear, propose the issue title/body first.
+Only create a GitHub issue without asking when the PR itself provides unambiguous code context and the duplicate search returned no candidate. If the context is unclear or a possible match exists, propose the issue title/body or canonical-match decision first.
 
 ## Step 3: Ensure GitHub Issues Are Assigned
 
@@ -116,16 +133,20 @@ Before creating, ingesting, or associating a Linear issue, verify that the targe
 
 For every associated GitHub issue:
 
-1. Check whether it has been ingested into Linear.
-2. If a matching Linear ticket exists, verify it is assigned to the current Linear user.
-3. If the Linear ticket is unassigned or assigned to someone else, assign it to the current user unless another owner is clearly intentional.
-4. If no Linear ticket exists, create or request ingestion according to the available Linear/GitHub integration tooling, then assign the resulting ticket to the current user.
+1. Build a canonical fingerprint from the GitHub issue URL, repository and PR number, PR URL, branch, normalized title, and substantive scope.
+2. Search every applicable Linear connection for exact URL matches first and semantic matches second. Also inspect the PR's existing Linear links and attachments.
+3. If one matching Linear ticket exists, reuse it and verify it is assigned to the current Linear user.
+4. If several matching tickets exist, select the fuller ticket most directly linked by the PR, propose or apply the approved duplicate relations, and ingest nothing new.
+5. If the canonical ticket is unassigned or assigned to someone else, assign it to the current user unless another owner is clearly intentional.
+6. Only when the full duplicate check returns no match, create or request ingestion, assign the result, then re-query before processing another tracker for the same PR.
 
 If Linear tools are unavailable, continue the rest of the workflow and list the exact Linear checks that could not be completed.
 
 ## Step 5: Slack Intake
 
 Check recent Slack messages directed to the current user and recent threads where they participated. Look for requests that imply follow-up work.
+
+Before proposing a Slack-derived ticket, search the applicable GitHub and Linear connections for the same request, links, PR, customer, and substantive scope. Classify an already-tracked request as `No ticket` and link the canonical record instead of proposing another tracker.
 
 Classify each candidate:
 
@@ -150,6 +171,8 @@ Ask the user to confirm before creating any Slack-derived GitHub issue or Linear
 
 Before walking the priority queue, fetch the current user's incomplete, unblocked assigned Linear tickets with priority `0 No priority`.
 
+For the main report, record the applicable unprioritized cohort without asking a question. Defer the recommendation and confirmation loop below until the issue-resolution phase.
+
 When active unprioritized tickets exist:
 
 1. Exclude completed, canceled, duplicate, and archived tickets. Inspect blocked candidates and their active blocker chains before removing them from the actionable queue.
@@ -158,13 +181,13 @@ When active unprioritized tickets exist:
 4. Present only the highest-priority ticket using the [Decision Context Format](#decision-context-format), recommend `High`, `Medium`, `Low`, or `Close/Duplicate`, and explain whether it blocks other work or people, has deadline or SLA risk, affects a core offering, is customer/admin/security sensitive, or is only cleanup.
 5. Ask the user to approve or correct that single recommendation. Apply only the approved priority/state change, then wait for the response before presenting another decision.
 
-## Step 7: Walk Linear Tickets by Priority and Deadline
+## Step 7: Build the Highest-Priority Linear Report Cohort
 
-Fetch the current user's incomplete assigned Linear tickets. Sort first by priority: `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`. Within each priority, sort overdue tickets first, then by ascending due date, then place tickets without a due date last.
+Fetch the current user's incomplete assigned Linear tickets. Sort first by priority: `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`. Select every actionable ticket tied at the first priority level that contains actionable work. Within that cohort, sort overdue tickets first, then by ascending due date, then place tickets without a due date last. Keep lower-priority tickets out of the main report; they remain available for the later walkthrough.
 
 When using Linear MCP tools, request the current user's issues and filter out completed, canceled, duplicate, and archived work. Inspect blocked states, `Blocked` labels, and active blocker relations before building the actionable queue. Replace a blocked candidate with its highest-ranked active blocker when that blocker is actionable by the current user; follow nested blocker relations recursively. Do not let a later deadline at the same priority jump ahead merely because the earlier ticket is blocked.
 
-For each ticket, report:
+For each ticket in the selected cohort, report:
 
 1. **Open PR?** Link the PR if one exists. If none exists, say `No`.
 2. **CI status:** passing, failing, pending, missing, or unknown.
@@ -176,7 +199,7 @@ Do not mark a ticket as ready based only on unit tests. Live-code evidence is re
 
 ## Step 8: Remediate Open PRs After the Initial Report
 
-Show the initial status tables in [Initial Status Output](#initial-status-output) before changing PR code. Treat this as an interim report and continue the same turn.
+Show the main status tables in [Initial Status Output](#initial-status-output) before changing PR code. This work belongs to the issue-resolution phase; it does not start the one-by-one issue walkthrough.
 
 Then revisit every open PR authored by the current user from Step 2. A PR is eligible for remediation when any of these conditions apply:
 
@@ -207,11 +230,11 @@ When several PRs are eligible, prefer separate OpenHands or Agent Canvas convers
 
 Do not modify PRs authored by other people merely because they appeared in Step 1 as awaiting the user's review. If credentials, repository access, external services, or reproducible live environments block a fix, exhaust safe alternatives and report the precise blocker instead of claiming success.
 
-After all eligible PRs have been attempted, emit the [PR Remediation Output](#pr-remediation-output), then continue to Step 9.
+After all eligible PRs have been attempted, emit the [PR Remediation Output](#pr-remediation-output). Continue to Step 9 only when the issue-resolution phase is complete; the user may also request Step 9 earlier.
 
 ## Step 9: Interactive Linear Ticket Walkthrough
 
-Walk the sorted, actionable Linear tickets one by one, starting with the highest priority and earliest due date. For each ticket:
+Enter this phase only after issue resolution is complete or when the user explicitly requests it. Re-fetch the sorted, actionable Linear tickets, then walk them one by one, starting with the highest priority and earliest due date. For each ticket:
 1. Give the user the [Decision Context Format](#decision-context-format): a concise, self-contained summary of the ticket, current state, linked GitHub work, CI/review/evidence status, what is blocked or ready, and the concrete next action.
 2. If the ticket is blocked, follow its active blocker chain. Present the first actionable blocker instead and state the blocked ticket's priority and deadline that make the blocker timely.
 3. If the ticket requests cycle or sprint planning, switch to `$cycle-planning` and facilitate the planning session. Resume this walkthrough only after the session is completed or the user explicitly defers it.
@@ -223,7 +246,7 @@ Walk the sorted, actionable Linear tickets one by one, starting with the highest
 
 ## Initial Status Output
 
-Before Step 8 changes PR code, show these sections. The status tables may summarize multiple items, but `Action Items Requiring a Decision` must contain exactly one row: the highest-priority decision currently requiring the user's input. Do not include a second decision elsewhere in the same response.
+Before Step 8 changes PR code, show these sections. The main report is a complete status report for the highest active priority cohort, not an interactive decision prompt. Include every tied actionable item; do not cap the table or ask the user to choose one yet.
 
 ```markdown
 ## PRs Awaiting Review
@@ -241,18 +264,18 @@ Before Step 8 changes PR code, show these sections. The status tables may summar
 | Source | Proposed Ticket | Destination | Reason | Awaiting Confirmation |
 |--------|-----------------|-------------|--------|-----------------------|
 
-## Linear Priority Walkthrough
+## Highest-Priority Linear Items
 
 | Linear | Priority | Open PR | CI | Review | Live Evidence | Context Needed |
 |--------|----------|---------|----|--------|---------------|----------------|
 
-## Action Items Requiring a Decision
+## Highest-Priority Action Items
 
-| Item | Needed |
-|------|--------|
+| Item | Priority | Needed |
+|------|----------|--------|
 ```
 
-If a tool or credential is missing, include the exact access needed in `Action Items Requiring a Decision`.
+If a tool or credential is missing, include the exact access needed in `Highest-Priority Action Items`.
 
 ## PR Remediation Output
 

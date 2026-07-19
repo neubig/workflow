@@ -17,31 +17,6 @@ assert SPEC and SPEC.loader
 SPEC.loader.exec_module(MODULE)
 
 
-class EvidenceParsingTests(unittest.TestCase):
-    def test_extract_markdown_section_returns_evidence_content(self):
-        body = """## Summary\nSummary text\n\n## Evidence\n```bash\n$ python app.py\noutput: success\n```\n\n## Checklist\n- [x] Done\n"""
-        self.assertEqual(
-            MODULE.extract_markdown_section(body, "Evidence"),
-            "```bash\n$ python app.py\noutput: success\n```",
-        )
-
-    def test_evidence_section_accepts_screenshot(self):
-        evidence = "Validated in the browser. ![Screenshot](https://example.com/run.png)"
-        self.assertTrue(MODULE.evidence_section_has_live_run(evidence))
-
-    def test_evidence_section_accepts_fenced_command_output(self):
-        evidence = """```bash\n$ python app.py\noutput: success\n```"""
-        self.assertTrue(MODULE.evidence_section_has_live_run(evidence))
-
-    def test_evidence_section_rejects_blocked_manual_verification(self):
-        evidence = "Live verification is blocked pending credentials and still requires manual verification."
-        self.assertFalse(MODULE.evidence_section_has_live_run(evidence))
-
-    def test_evidence_section_rejects_plain_summary_without_live_run(self):
-        evidence = "Ran through the changes conceptually and described the expected behavior."
-        self.assertFalse(MODULE.evidence_section_has_live_run(evidence))
-
-
 class LinearTicketActionTests(unittest.TestCase):
     def test_ticket_with_linked_pull_request_points_to_github(self):
         ticket = MODULE.LinearTicket(
@@ -149,16 +124,156 @@ class LinearBlockedIssueTests(unittest.TestCase):
         self.assertFalse(MODULE.linear_node_is_blocked(node))
 
 
-class GitHubIdentityTests(unittest.TestCase):
-    def test_resolves_authenticated_github_user(self):
-        with mock.patch.object(MODULE, "run_gh", return_value="octocat") as run_gh:
-            self.assertEqual(MODULE.resolve_github_username(), "octocat")
+class BatchedGitHubContextTests(unittest.TestCase):
+    def test_report_uses_shared_collector_for_both_pr_queues(self):
+        collector = mock.Mock()
+        collector.gather.return_value = {
+            "viewer": "octocat",
+            "profile": "report",
+            "api_requests": 5,
+            "warnings": [],
+            "prs_awaiting_review": [
+                {
+                    "repository": "example/repo",
+                    "number": 1,
+                    "title": "Review me",
+                    "url": "https://github.com/example/repo/pull/1",
+                    "is_draft": False,
+                    "created_at": "2026-07-18T01:00:00Z",
+                    "ci": {"summary": "passing", "failing": []},
+                    "review_summary": "awaiting review",
+                    "live_evidence": {"likely_genuine": True},
+                    "unresolved_review_threads": [],
+                    "closing_issues": [],
+                }
+            ],
+            "authored_open_prs": [
+                {
+                    "repository": "example/repo",
+                    "number": 2,
+                    "title": "My draft",
+                    "url": "https://github.com/example/repo/pull/2",
+                    "is_draft": True,
+                    "created_at": "2026-07-18T02:00:00Z",
+                    "ci": {"summary": "passing", "failing": []},
+                    "review_summary": "unknown",
+                    "live_evidence": {"likely_genuine": False},
+                    "unresolved_review_threads": [],
+                    "closing_issues": [],
+                }
+            ],
+        }
 
-        run_gh.assert_called_once_with(["api", "user", "--jq", ".login"])
+        with mock.patch.object(MODULE, "_load_github_collector", return_value=collector):
+            review, ready, draft, metadata = MODULE.fetch_github_context("octocat")
 
-    def test_returns_none_when_authenticated_user_is_unavailable(self):
-        with mock.patch.object(MODULE, "run_gh", return_value={}):
-            self.assertIsNone(MODULE.resolve_github_username())
+        collector.gather.assert_called_once_with(
+            "octocat", "octocat", 100, False, "report"
+        )
+        self.assertEqual([pr.number for pr in review], [1])
+        self.assertEqual(ready, [])
+        self.assertEqual([pr.number for pr in draft], [2])
+        self.assertEqual(metadata["api_requests"], 5)
+        self.assertTrue(review[0].awaiting_user_review)
+
+
+class ActionItemReportTests(unittest.TestCase):
+    def make_ticket(self, identifier, priority, label, due_date=None):
+        return MODULE.LinearTicket(
+            identifier=identifier,
+            title=f"Ticket {identifier}",
+            description="",
+            priority=priority,
+            priority_label=label,
+            state="Todo",
+            state_type="unstarted",
+            url=f"https://linear.app/example/issue/{identifier}",
+            due_date=due_date,
+        )
+
+    def test_report_includes_every_ticket_at_highest_active_priority(self):
+        review = MODULE.GitHubPR(
+            repo="example/repo",
+            number=1,
+            title="Review me",
+            url="https://github.com/example/repo/pull/1",
+            is_draft=False,
+            created_at=MODULE.datetime.now(MODULE.timezone.utc),
+            awaiting_user_review=True,
+        )
+        checklist = MODULE.WorkflowChecklist(
+            review_requests=[review],
+            linear_tickets=[
+                self.make_ticket("ALL-3", 2, "High"),
+                self.make_ticket("ALL-2", 1, "Urgent", "2026-07-20"),
+                self.make_ticket("ALL-1", 1, "Urgent", "2026-07-19"),
+                self.make_ticket("ALL-4", 0, "No priority"),
+            ],
+        )
+
+        actions = checklist.action_items()
+        self.assertEqual(
+            [item["title"] for item in actions],
+            [
+                "example/repo#1 — Review me",
+                "ALL-1 — Ticket ALL-1",
+                "ALL-2 — Ticket ALL-2",
+            ],
+        )
+        self.assertEqual([item["priority"] for item in actions[1:]], [1, 1])
+
+        payload = MODULE.json.loads(checklist.to_json())
+        self.assertEqual(
+            payload["highest_linear_priority"], {"value": 1, "label": "Urgent"}
+        )
+        self.assertEqual(
+            [ticket["identifier"] for ticket in payload["linear_tickets"]],
+            ["ALL-1", "ALL-2"],
+        )
+        markdown = checklist.to_markdown()
+        self.assertIn("ALL-1", markdown)
+        self.assertIn("ALL-2", markdown)
+        self.assertNotIn("ALL-3", markdown)
+        self.assertNotIn("ALL-4", markdown)
+
+    def test_no_priority_tickets_form_the_cohort_when_they_are_all_that_remain(self):
+        checklist = MODULE.WorkflowChecklist(
+            linear_tickets=[
+                self.make_ticket("ALL-2", 0, "No priority"),
+                self.make_ticket("ALL-1", 0, "No priority"),
+            ]
+        )
+
+        self.assertEqual(
+            [ticket.identifier for ticket in checklist.highest_priority_linear_tickets()],
+            ["ALL-1", "ALL-2"],
+        )
+
+    def test_draft_conflicts_are_rendered_before_other_draft_actions(self):
+        created_at = MODULE.datetime.now(MODULE.timezone.utc)
+        evidence_pr = MODULE.GitHubPR(
+            repo="example/repo",
+            number=2,
+            title="Needs evidence",
+            url="https://github.com/example/repo/pull/2",
+            is_draft=True,
+            created_at=created_at,
+        )
+        conflict_pr = MODULE.GitHubPR(
+            repo="example/repo",
+            number=3,
+            title="Has conflicts",
+            url="https://github.com/example/repo/pull/3",
+            is_draft=True,
+            created_at=created_at,
+            mergeable="CONFLICTING",
+        )
+
+        report = MODULE.WorkflowChecklist(
+            draft_prs=[evidence_pr, conflict_pr]
+        ).to_markdown()
+
+        self.assertLess(report.index("Has conflicts"), report.index("Needs evidence"))
 
 
 if __name__ == "__main__":

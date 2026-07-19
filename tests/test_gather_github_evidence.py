@@ -45,6 +45,15 @@ output: success
         self.assertTrue(summary["blocked_or_incomplete"])
         self.assertFalse(summary["likely_genuine"])
 
+    def test_human_tested_evidence_with_results_is_genuine(self):
+        summary = MODULE.evidence_summary(
+            "- [x] A human has tested this change\n\n"
+            "## Evidence\nThe updated flow matched expectations."
+        )
+
+        self.assertTrue(summary["human_tested"])
+        self.assertTrue(summary["likely_genuine"])
+
 
 class CheckSummaryTests(unittest.TestCase):
     def test_failure_takes_precedence_over_pending_checks(self):
@@ -87,45 +96,59 @@ class CheckSummaryTests(unittest.TestCase):
 
 
 class GatherTests(unittest.TestCase):
-    def test_both_queues_are_collected_in_one_request(self):
+    def test_both_queues_are_collected_in_one_pipelined_report(self):
         review_pr = {
+            "node_id": "PR_review",
             "number": 1,
             "title": "Review me",
-            "url": "https://github.com/example/repo/pull/1",
-            "updatedAt": "2026-07-18T01:00:00Z",
-            "repository": {"nameWithOwner": "example/repo"},
-            "author": {"login": "contributor"},
+            "html_url": "https://github.com/example/repo/pull/1",
+            "state": "open",
+            "draft": False,
+            "created_at": "2026-07-17T01:00:00Z",
+            "updated_at": "2026-07-18T01:00:00Z",
+            "body": "",
+            "repository_url": "https://api.github.com/repos/example/repo",
+            "user": {"login": "contributor"},
         }
         authored_pr = {
+            "node_id": "PR_authored",
             "number": 2,
             "title": "My change",
-            "url": "https://github.com/example/repo/pull/2",
-            "updatedAt": "2026-07-18T02:00:00Z",
-            "repository": {"nameWithOwner": "example/repo"},
-            "author": {"login": "octocat"},
-        }
-        response = {
-            "data": {
-                "viewer": {"login": "octocat"},
-                "rateLimit": {"cost": 10, "remaining": 4990},
-                "reviewRequested": {
-                    "issueCount": 1,
-                    "pageInfo": {"hasNextPage": False, "endCursor": "review"},
-                    "nodes": [review_pr],
-                },
-                "authored": {
-                    "issueCount": 1,
-                    "pageInfo": {"hasNextPage": False, "endCursor": "authored"},
-                    "nodes": [authored_pr],
-                },
-            }
+            "html_url": "https://github.com/example/repo/pull/2",
+            "state": "open",
+            "draft": True,
+            "created_at": "2026-07-17T02:00:00Z",
+            "updated_at": "2026-07-18T02:00:00Z",
+            "body": "## Evidence\n$ run\noutput: success",
+            "repository_url": "https://api.github.com/repos/example/repo",
+            "user": {"login": "octocat"},
         }
 
-        with mock.patch.object(MODULE, "run_graphql", return_value=response) as run:
-            snapshot = MODULE.gather("@me", "@me", 100, False)
+        def search(query, _max_prs):
+            item = review_pr if "review-requested" in query else authored_pr
+            return 1, [item], 1
 
-        run.assert_called_once()
-        self.assertEqual(snapshot["api_requests"], 1)
+        def graphql(variables, query):
+            nodes = [{"id": node_id} for node_id in variables["ids"]]
+            data = {"nodes": nodes}
+            if query == MODULE.REPORT_STATUS_QUERY:
+                data.update(
+                    {
+                        "viewer": {"login": "octocat"},
+                        "rateLimit": {"cost": 1, "remaining": 4990},
+                    }
+                )
+            return {"data": data}
+
+        with (
+            mock.patch.object(MODULE, "run_search", side_effect=search) as run_search,
+            mock.patch.object(MODULE, "run_graphql", side_effect=graphql) as run_graphql,
+        ):
+            snapshot = MODULE.gather("@me", "@me", 100, False, "report")
+
+        self.assertEqual(run_search.call_count, 2)
+        self.assertEqual(run_graphql.call_count, 6)
+        self.assertEqual(snapshot["api_requests"], 8)
         self.assertEqual(snapshot["viewer"], "octocat")
         self.assertEqual(len(snapshot["prs_awaiting_review"]), 1)
         self.assertEqual(len(snapshot["authored_open_prs"]), 1)
