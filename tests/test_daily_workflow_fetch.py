@@ -15,6 +15,25 @@ SPEC = importlib.util.spec_from_file_location("daily_workflow_fetch", MODULE_PAT
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
 SPEC.loader.exec_module(MODULE)
+SKILL_PATH = MODULE_PATH.parents[1] / "SKILL.md"
+
+
+class LinearCredentialPolicyTests(unittest.TestCase):
+    def test_skill_uses_token_backed_initial_fetch_when_keys_are_available(self):
+        skill = SKILL_PATH.read_text()
+
+        self.assertIn(
+            "bundled report helper may use runtime-injected `LINEAR_API_KEYS`",
+            skill,
+        )
+        self.assertIn(
+            "python3 scripts/daily-workflow-fetch.py --output json",
+            skill,
+        )
+        self.assertNotIn(
+            "python3 scripts/daily-workflow-fetch.py --skip-linear --output json",
+            skill,
+        )
 
 
 class LinearTicketActionTests(unittest.TestCase):
