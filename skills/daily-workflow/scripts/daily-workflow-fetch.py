@@ -15,7 +15,7 @@ When --github-user is omitted, the script uses the authenticated GitHub CLI
 user. The generated report may contain private work data; keep it local.
 
 Environment variables:
-    LINEAR_API_KEY - Linear API key
+    LINEAR_API_KEYS - Comma-separated Linear API keys
     GITHUB_TOKEN - GitHub personal access token
 """
 
@@ -762,6 +762,29 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
     return sorted(tickets, key=linear_ticket_sort_key)
 
 
+def parse_linear_api_keys(value: str | None) -> list[str]:
+    """Parse and deduplicate comma-separated Linear API keys."""
+    if not value:
+        return []
+
+    return list(dict.fromkeys(key.strip() for key in value.split(",") if key.strip()))
+
+
+def fetch_linear_tickets_for_keys(api_keys: list[str]) -> list[LinearTicket]:
+    """Fetch and merge assigned tickets from every configured Linear key."""
+    if not api_keys:
+        return []
+
+    tickets_by_url: dict[str, LinearTicket] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(api_keys)) as executor:
+        futures = [executor.submit(fetch_linear_tickets, key) for key in api_keys]
+        for future in futures:
+            for ticket in future.result():
+                tickets_by_url.setdefault(ticket.url, ticket)
+
+    return sorted(tickets_by_url.values(), key=linear_ticket_sort_key)
+
+
 def _load_github_collector() -> Any:
     path = pathlib.Path(__file__).with_name("gather_github_evidence.py")
     spec = importlib.util.spec_from_file_location("daily_workflow_github", path)
@@ -873,20 +896,24 @@ def main():
         default="markdown",
         help="Output format",
     )
-    parser.add_argument("--skip-linear", action="store_true", help="Skip Linear fetch")
     parser.add_argument("--skip-github", action="store_true", help="Skip GitHub fetch")
     args = parser.parse_args()
 
     checklist = WorkflowChecklist()
-    linear_key = None if args.skip_linear else os.environ.get("LINEAR_API_KEY")
-    if not args.skip_linear and not linear_key:
-        print("LINEAR_API_KEY not set, skipping Linear", file=sys.stderr)
+    linear_keys = parse_linear_api_keys(os.environ.get("LINEAR_API_KEYS"))
+    if not linear_keys:
+        print("LINEAR_API_KEYS not set, skipping Linear", file=sys.stderr)
 
     tasks: dict[str, concurrent.futures.Future[Any]] = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        if linear_key:
-            print("Fetching Linear tickets...", file=sys.stderr)
-            tasks["linear"] = executor.submit(fetch_linear_tickets, linear_key)
+        if linear_keys:
+            print(
+                f"Fetching Linear tickets from {len(linear_keys)} connection(s)...",
+                file=sys.stderr,
+            )
+            tasks["linear"] = executor.submit(
+                fetch_linear_tickets_for_keys, linear_keys
+            )
         if not args.skip_github:
             github_user = args.github_user or "@me"
             print(f"Fetching GitHub report context for {github_user}...", file=sys.stderr)

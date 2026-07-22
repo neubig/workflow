@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "snapshot_date": "2026-07-16",
+  "github": [
+    {
+      "id": "github-pr-agent-canvas-1822",
+      "type": "pull_request",
+      "repository": "OpenHands/agent-canvas",
+      "number": 1822,
+      "title": "fix(frontend): stop streaming re-render storm (#12681)",
+      "state": "open",
+      "labels": [
+        "type: fix"
+      ],
+      "source_url": "https://github.com/OpenHands/agent-canvas/pull/1822",
+      "priority": "High",
+      "priority_score": 90,
+      "triage_rationale": "An open bug-fix PR with failing evidence should be inspected before routine work."
+    },
+    {
+      "id": "github-issue-docs-626",
+      "type": "issue",
+      "repository": "OpenHands/docs",
+      "number": 626,
+      "title": "Add an Agent Canvas daily engineering workflow use case",
+      "state": "open",
+      "labels": [],
+      "source_url": "https://github.com/OpenHands/docs/issues/626",
+      "priority": "Medium",
+      "priority_score": 75,
+      "triage_rationale": "This public documentation deliverable is the human-selected dependency for the demo walkthrough."
+    }
+  ],
+  "slack": [
+    {
+      "id": "slack-fixture-public-demo-request",
+      "type": "slack_fixture",
+      "source_ref": "fixture://public-daily-workflow/slack/demo-request",
+      "channel_reference": "#synthetic-public-demo",
+      "display_text": "[SYNTHETIC FIXTURE] Please include a recovery path and privacy review before publishing the demo.",
+      "priority": "Medium",
+      "priority_score": 60,
+      "triage_rationale": "A publication-safety request must be completed before recording.",
+      "disclosure": {
+        "status": "synthetic_fixture",
+        "approved_for_public_demo": true,
+        "contains_real_slack_content": false
+      }
+    }
+  ]
+}

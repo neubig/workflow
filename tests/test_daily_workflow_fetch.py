@@ -19,10 +19,13 @@ SKILL_PATH = MODULE_PATH.parents[1] / "SKILL.md"
 
 
 class LinearCredentialPolicyTests(unittest.TestCase):
-    def test_skill_uses_token_backed_fetch_when_key_is_available(self):
+    def test_skill_uses_token_backed_initial_fetch_when_keys_are_available(self):
         skill = SKILL_PATH.read_text()
 
-        self.assertIn("Use `LINEAR_API_KEY` as the primary Linear credential", skill)
+        self.assertIn(
+            "bundled report helper may use runtime-injected `LINEAR_API_KEYS`",
+            skill,
+        )
         self.assertIn(
             "python3 scripts/daily-workflow-fetch.py --output json",
             skill,
@@ -85,6 +88,53 @@ class LinearTicketOrderingTests(unittest.TestCase):
         self.assertEqual(
             [ticket.identifier for ticket in ordered],
             ["ALL-1", "ALL-2", "ALL-3", "ALL-4"],
+        )
+
+
+class LinearApiKeysTests(unittest.TestCase):
+    def make_ticket(self, identifier, priority, url=None):
+        return MODULE.LinearTicket(
+            identifier=identifier,
+            title="Example",
+            description="",
+            priority=priority,
+            priority_label="High" if priority == 2 else "Medium",
+            state="Todo",
+            state_type="unstarted",
+            url=url or f"https://linear.app/example/issue/{identifier}",
+        )
+
+    def test_parse_comma_separated_keys_trims_blanks_and_deduplicates(self):
+        self.assertEqual(
+            MODULE.parse_linear_api_keys(" first,second, , first ,third "),
+            ["first", "second", "third"],
+        )
+
+    def test_fetches_every_key_and_deduplicates_merged_tickets(self):
+        duplicate_url = "https://linear.app/example/issue/ALL-2"
+        tickets_by_key = {
+            "first": [
+                self.make_ticket("ALL-2", 2, duplicate_url),
+                self.make_ticket("ALL-3", 3),
+            ],
+            "second": [
+                self.make_ticket("ALL-1", 2),
+                self.make_ticket("ALL-2", 2, duplicate_url),
+            ],
+        }
+
+        with mock.patch.object(
+            MODULE,
+            "fetch_linear_tickets",
+            side_effect=lambda key: tickets_by_key[key],
+        ) as fetch:
+            tickets = MODULE.fetch_linear_tickets_for_keys(["first", "second"])
+
+        self.assertCountEqual(
+            [call.args[0] for call in fetch.call_args_list], ["first", "second"]
+        )
+        self.assertEqual(
+            [ticket.identifier for ticket in tickets], ["ALL-1", "ALL-2", "ALL-3"]
         )
 
 

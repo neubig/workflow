@@ -11,10 +11,10 @@ Use this skill when the user asks to review or organize their daily workflow. Fi
 
 - Resolve the current user before taking action. Use `gh api user --jq .login` for GitHub, the current-user identity from Linear, and the current Slack profile when those services are available. Ask the user when an identity cannot be resolved.
 - Be human-in-the-loop. Propose new GitHub issues or Linear tickets before creating them from Slack messages or ambiguous context.
-- Use `LINEAR_API_KEY` as the primary Linear credential when it is available. Run the bundled token-backed fetch for the initial snapshot; use the token for later Linear reads and approved writes without printing it. Use Linear MCP connections for additional workspaces not represented by the token, or as the fallback when the token is unavailable.
+- Prefer Linear MCP tools for Linear reads and writes. The bundled report helper may use runtime-injected `LINEAR_API_KEYS` for its read-only initial snapshot. If neither source is available, report the access needed; do not document raw Linear API token workarounds in this workflow.
 - Prefer GitHub tools or `gh` for GitHub reads and writes.
 - Check Slack only when a Slack connector/tool is available. If unavailable, report that Slack intake could not be checked.
-- When the token and one or more Linear connections are available, identify the token's workspace, query every additional workspace connection, and consider their results together unless the user specifies otherwise; do not treat one credential or connection as the complete work queue by default. Apply the same all-connections rule to Slack.
+- When multiple Linear or Slack connections are available, examine all of them and consider their results together unless the user specifies otherwise; do not treat one connection as the complete work queue by default.
 - Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to the current user unless another owner is clearly intentional.
 - Maintain exactly one canonical GitHub issue and one canonical Linear ticket for each unit of work. Before any issue creation or Linear ingestion, search every applicable GitHub repository and configured Linear connection using the PR URL/number, linked issue URL, branch name, normalized title, and substantive keywords. Reuse and update an existing tracker even when its title differs. Never launch competing create/ingest operations for the same candidate in parallel. When duplicates already exist, preserve the fuller tracker most directly linked by the PR, mark the others duplicate, and close their redundant GitHub issues with links to the canonical records.
 - If a priority is set, the issue should not be in `triage`; set it to `todo` if no PR is open, `in progress` if a draft PR is open or a PR has been reviewed but no response to the review has been posted, and `under review` if the PR is ready but no review has been submitted. For issues in `under review`, suggest potential reviewers if none are assigned, but do not request a review unless asked to.
@@ -53,18 +53,18 @@ Do not make the user open a link to understand the decision. Links are supportin
 This skill packages its executable helpers in `scripts/`. Run them relative to the skill root so the skill remains portable when installed independently.
 
 - `scripts/gather_github_evidence.py` pipelines the review-requested and authored-PR queues into a shared JSON or Markdown snapshot. Its default `report` profile overlaps discovery and low-cost detail reads; use `--profile full` only for remediation detail. Treat its evidence classification and remediation reasons as heuristics, follow every truncation warning with a targeted read, and keep generated reports local.
-- `scripts/daily-workflow-fetch.py` generates the action-oriented Markdown or JSON report from the shared GitHub snapshot and optional local Linear data. It gathers GitHub and Linear concurrently when `LINEAR_API_KEY` is available. Keep its output local.
+- `scripts/daily-workflow-fetch.py` generates the action-oriented Markdown or JSON report from the shared GitHub snapshot and optional local Linear data. When `LINEAR_API_KEYS` is available, it fetches every comma-separated Linear connection and GitHub concurrently, then combines their assigned tickets. Keep its output local.
 - `scripts/check_ready_prs.py` checks the current user's open PRs against the readiness and live-evidence criteria used in this workflow. It requires `gh` authentication.
 
 ## Fast Report Path
 
-Start the initial report with the unified generator. When `LINEAR_API_KEY` is available, always let the generator use it:
+Start the initial report with the unified generator. It automatically uses every runtime-provided Linear credential when available and otherwise continues with GitHub only:
 
 ```bash
 python3 scripts/daily-workflow-fetch.py --output json
 ```
 
-Use `--skip-linear` only when `LINEAR_API_KEY` is absent and Linear will be read exclusively through configured tools. At the same time, identify the token's Linear workspace, start one batched assigned-ticket read for every configured Linear connection that represents a different workspace, and start one recent-request search for every configured Slack connection. Do not wait for one source before starting another. Reuse those result sets throughout the initial report instead of repeating identity, list, or per-item reads.
+At the same time, start one batched assigned-ticket read for every additional configured Linear connection and one recent-request search for every configured Slack connection. Do not wait for one source before starting another. Reuse those result sets throughout the initial report instead of repeating identity, list, or per-item reads.
 
 Build and emit the main report from those shared snapshots. Include every tied item at the highest active Linear priority; never apply an arbitrary count limit. Do not run `check_ready_prs.py`, the collector's `full` profile, fetch check names or comment bodies, follow blocker chains beyond a candidate action item, or make per-PR detail reads first. If a source is slower or unavailable, report that source's status without rerunning the completed sources. During the following issue-resolution phase, fetch only the target item's full context and immediately re-fetch it before any mutation.
 
@@ -185,7 +185,7 @@ When active unprioritized tickets exist:
 
 Fetch the current user's incomplete assigned Linear tickets. Sort first by priority: `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 No priority`. Select every actionable ticket tied at the first priority level that contains actionable work. Within that cohort, sort overdue tickets first, then by ascending due date, then place tickets without a due date last. Keep lower-priority tickets out of the main report; they remain available for the later walkthrough.
 
-For every Linear source, whether token-backed or MCP-backed, request the current user's issues and filter out completed, canceled, duplicate, and archived work. Inspect blocked states, `Blocked` labels, and active blocker relations before building the actionable queue. Replace a blocked candidate with its highest-ranked active blocker when that blocker is actionable by the current user; follow nested blocker relations recursively. Do not let a later deadline at the same priority jump ahead merely because the earlier ticket is blocked.
+For every Linear source, request the current user's issues and filter out completed, canceled, duplicate, and archived work. Inspect blocked states, `Blocked` labels, and active blocker relations before building the actionable queue. Replace a blocked candidate with its highest-ranked active blocker when that blocker is actionable by the current user; follow nested blocker relations recursively. Do not let a later deadline at the same priority jump ahead merely because the earlier ticket is blocked.
 
 For each ticket in the selected cohort, report:
 
