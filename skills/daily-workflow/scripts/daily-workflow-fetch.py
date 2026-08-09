@@ -54,6 +54,9 @@ class LinearTicket:
     due_date: str | None = None
     labels: list[str] = field(default_factory=list)
     external_links: list[ExternalLink] = field(default_factory=list)
+    # Used to defer tickets scheduled for a future cycle until the current cycle is done.
+    team_id: str | None = None
+    cycle_starts_at: str | None = None
 
     @property
     def is_actionable(self) -> bool:
@@ -650,8 +653,113 @@ def linear_node_is_blocked(node: dict[str, Any]) -> bool:
     )
 
 
+def _parse_linear_datetime(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def fetch_team_cycle_context(api_key: str) -> dict[str, dict[str, Any]]:
+    """Return {team_id: {has_current, current_finished}} from each team's cycles.
+
+    `current_finished` is True when the team's currently in-progress cycle has
+    completed every issue it contains. This drives the rule that defers tickets
+    scheduled for a future cycle unless all of the current cycle's issues are done.
+    """
+    import urllib.request
+
+    query = """
+    query {
+      teams {
+        nodes {
+          id
+          name
+          cycles(first: 40) {
+            nodes {
+              id
+              number
+              startsAt
+              endsAt
+              issueCountHistory
+              completedIssueCountHistory
+            }
+          }
+        }
+      }
+    }
+    """
+    req = urllib.request.Request(
+        "https://api.linear.app/graphql",
+        data=json.dumps({"query": query}).encode(),
+        headers={"Content-Type": "application/json", "Authorization": api_key},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception as e:
+        print(f"Error fetching Linear team cycles: {e}", file=sys.stderr)
+        return {}
+
+    now = datetime.now(timezone.utc)
+    ctx: dict[str, dict[str, Any]] = {}
+    for team in data.get("data", {}).get("teams", {}).get("nodes", []):
+        team_id = team.get("id")
+        if not team_id:
+            continue
+        seen = []
+        for cycle in team.get("cycles", {}).get("nodes", []):
+            start, end = cycle.get("startsAt"), cycle.get("endsAt")
+            if not start or not end:
+                continue
+            total_hist = cycle.get("issueCountHistory") or []
+            done_hist = cycle.get("completedIssueCountHistory") or []
+            total = total_hist[-1] if total_hist else 0
+            done = done_hist[-1] if done_hist else 0
+            seen.append({
+                "starts": _parse_linear_datetime(start),
+                "ends": _parse_linear_datetime(end),
+                "total": total,
+                "done": done,
+            })
+        if not seen:
+            continue
+        current = next((c for c in seen if c["starts"] <= now < c["ends"]), None)
+        ctx[team_id] = {
+            "has_current": current is not None,
+            "current_finished": bool(
+                current is not None
+                and current["total"] > 0
+                and current["done"] >= current["total"]
+            ),
+        }
+    return ctx
+
+
+def future_cycle_excluded(
+    team_id: str | None,
+    cycle_starts_at: str | None,
+    ctx: dict[str, dict[str, Any]],
+    now: datetime,
+) -> bool:
+    """Defer tickets scheduled for a future cycle unless the current cycle is done.
+
+    A ticket is excluded when it sits in a cycle that starts after `now` and its
+    team has an in-progress cycle with unfinished work. Teams without a current
+    cycle, teams without cycle data, and tickets not assigned to a cycle are kept.
+    """
+    if not cycle_starts_at or not team_id:
+        return False
+    start = _parse_linear_datetime(cycle_starts_at)
+    if start <= now:
+        return False  # current or past cycle
+    team = ctx.get(team_id)
+    if team is None or not team["has_current"]:
+        return False  # no current cycle to judge completion against
+    if team["current_finished"]:
+        return False  # current cycle fully finished -> surface future-cycle work
+    return True
+
+
 def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
-    """Fetch assigned Linear tickets that are not blocked."""
+    """Fetch assigned Linear tickets that are not blocked or future-cycle deferred."""
     import urllib.request
 
     # Fetch in batches to avoid Linear's query complexity limit
@@ -660,6 +768,8 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
     all_tickets: list[LinearTicket] = []
     has_more = True
     cursor = None
+    now = datetime.now(timezone.utc)
+    cycle_ctx = fetch_team_cycle_context(api_key)
 
     while has_more:
         after_clause = f', after: "{cursor}"' if cursor else ""
@@ -680,6 +790,8 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
                         dueDate
                         url
                         state {{ name type }}
+                        team {{ id }}
+                        cycle {{ startsAt }}
                         labels {{ nodes {{ name }} }}
                         attachments {{
                             nodes {{
@@ -751,13 +863,21 @@ def fetch_linear_tickets(api_key: str) -> list[LinearTicket]:
                     due_date=node.get("dueDate"),
                     labels=labels,
                     external_links=external_links,
+                    team_id=node.get("team", {}).get("id") if node.get("team") else None,
+                    cycle_starts_at=node.get("cycle", {}).get("startsAt")
+                    if node.get("cycle")
+                    else None,
                 )
             )
 
         has_more = page_info.get("hasNextPage", False)
         cursor = page_info.get("endCursor")
 
-    tickets = all_tickets
+    tickets = [
+        ticket
+        for ticket in all_tickets
+        if not future_cycle_excluded(ticket.team_id, ticket.cycle_starts_at, cycle_ctx, now)
+    ]
 
     return sorted(tickets, key=linear_ticket_sort_key)
 
