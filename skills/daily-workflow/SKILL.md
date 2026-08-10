@@ -11,9 +11,10 @@ Use this skill when the user asks to review or organize their daily workflow. Fi
 
 - Resolve the current user before taking action. Use `gh api user --jq .login` for GitHub, the current-user identity from Linear, and the current Slack profile when those services are available. Ask the user when an identity cannot be resolved.
 - Be human-in-the-loop. Propose new GitHub issues or Linear tickets before creating them from Slack messages or ambiguous context.
-- Prefer Linear MCP tools for Linear reads and writes. The bundled report helper may use runtime-injected `LINEAR_API_KEYS` for its read-only initial snapshot. If neither source is available, report the access needed; do not document raw Linear API token workarounds in this workflow.
+- Use Linear integrations/MCP tools as the authoritative Linear source. Before declaring Linear unavailable, resolve the current user and fetch assigned issues through every exposed Linear connection (including integrations-hub connections). The bundled report helper and its runtime `LINEAR_API_KEYS` value are only an optional local snapshot path; a missing or failed `LINEAR_API_KEYS` check must never be treated as evidence that Linear integrations are unavailable. If an integration read fails, report that specific connection and continue with the others.
 - Prefer GitHub tools or `gh` for GitHub reads and writes.
 - Check Slack only when a Slack connector/tool is available. If unavailable, report that Slack intake could not be checked.
+- Every Linear reference shown to the user must include the human-readable identifier and the exact issue title together, preferably as `[IDENTIFIER — title](url)`. Never output a bare Linear identifier, bare Linear URL, or an identifier without its title in a table, action list, decision context, or summary. If a title is missing or truncated, fetch the issue before reporting it; if it cannot be fetched, report the access problem instead of emitting the bare ID.
 - When multiple Linear or Slack connections are available, examine all of them and consider their results together unless the user specifies otherwise; do not treat one connection as the complete work queue by default.
 - Make assignment explicit: associated GitHub issues and Linear tickets should be assigned to the current user unless another owner is clearly intentional.
 - Maintain exactly one canonical GitHub issue and one canonical Linear ticket for each unit of work. Before any issue creation or Linear ingestion, search every applicable GitHub repository and configured Linear connection using the PR URL/number, linked issue URL, branch name, normalized title, and substantive keywords. Reuse and update an existing tracker even when its title differs. Never launch competing create/ingest operations for the same candidate in parallel. When duplicates already exist, preserve the fuller tracker most directly linked by the PR, mark the others duplicate, and close their redundant GitHub issues with links to the canonical records.
@@ -190,11 +191,14 @@ For every Linear source, request the current user's issues and filter out comple
 
 For each ticket in the selected cohort, report:
 
-1. **Open PR?** Link the PR if one exists. If none exists, say `No`.
-2. **CI status:** passing, failing, pending, missing, or unknown.
-3. **Review status:** passing review, changes requested/unresolved comments, awaiting review, or unknown.
-4. **Live-code evidence:** whether the PR shows evidence that live code failed before and passed after. For non-bug work, evidence should show the live feature or workflow running successfully.
-5. **If no PR is open:** the additional context, credentials, repository access, environment, or decision needed to start work. If nothing is missing, say what repo/task context is enough to start.
+1. **Linear:** always render `[IDENTIFIER — exact title](url)`; this field is mandatory even when the ticket has no PR.
+2. **Open PR?** Link the PR if one exists. If none exists, say `No`.
+3. **CI status:** passing, failing, pending, missing, or unknown.
+4. **Review status:** passing review, changes requested/unresolved comments, awaiting review, or unknown.
+5. **Live-code evidence:** whether the PR shows evidence that live code failed before and passed after. For non-bug work, evidence should show the live feature or workflow running successfully.
+6. **If no PR is open:** the additional context, credentials, repository access, environment, or decision needed to start work. If nothing is missing, say what repo/task context is enough to start.
+
+Before emitting any report, scan every Linear table row and action item for a bare identifier or URL. Replace it with the identifier, exact title, and link, or stop and fetch the missing title.
 
 Do not mark a ticket as ready based only on unit tests. Live-code evidence is required unless the PR is truly content-only.
 
@@ -266,6 +270,8 @@ Before Step 8 changes PR code, show these sections. The main report is a complet
 |--------|-----------------|-------------|--------|-----------------------|
 
 ## Highest-Priority Linear Items
+
+The `Linear` cell must always contain `[IDENTIFIER — exact title](url)`. Bare identifiers and bare URLs are invalid output.
 
 | Linear | Priority | Open PR | CI | Review | Live Evidence | Context Needed |
 |--------|----------|---------|----|--------|---------------|----------------|

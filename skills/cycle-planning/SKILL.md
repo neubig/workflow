@@ -39,9 +39,13 @@ Resolve and re-fetch:
 - current work in progress and likely carryover
 - previous three comparable cycles: forecast, completed work, rollover, and interruption rate
 - upcoming availability changes, support/on-call load, holidays, and known interruptions
+- new or materially updated tracker items since the previous planning session or cycle, using an explicit time boundary and source timestamps
+- recent team-channel, direct-request, and thread context since that boundary: decisions, commitments, availability changes, interruptions, and stakeholder requests
 - the team's Definition of Done and one improvement item from the last retrospective
 
-Do not assume missing capacity or stakeholder information. State what is unknown and ask the user for the single most important missing input.
+Query every available applicable tracker and messaging connection. Reconcile duplicates and source-of-truth direction before treating a message-derived request or tracker delta as new work. Do not assume missing capacity or stakeholder information. State what is unknown and ask the user for the single most important missing input.
+
+For each material theme, scope, capacity, buffer, sequencing, or ownership recommendation, record the alternatives considered, source facts and counts, assumptions, confidence, expected impact, risk, and the measurable threshold or observation that would change the choice. Distinguish facts from inference and expose missing measurements instead of inventing precision.
 
 ### 2. Agree on Why: Draft the Cycle Themes
 
@@ -197,6 +201,11 @@ Use this compact structure during the final confirmation:
 ### Risks and Open Decisions
 
 - ...
+
+### Decision Evidence
+
+| Decision | Alternatives | Facts and Counts | Assumptions | Confidence | Impact and Risk | Change Threshold |
+|---|---|---|---|---|---|---|
 
 ### Confidence
 
