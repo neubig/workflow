@@ -22,10 +22,8 @@ class LinearCredentialPolicyTests(unittest.TestCase):
     def test_skill_uses_token_backed_initial_fetch_when_keys_are_available(self):
         skill = SKILL_PATH.read_text()
 
-        self.assertIn(
-            "bundled report helper may use runtime-injected `LINEAR_API_KEYS`",
-            skill,
-        )
+        self.assertIn("LINEAR_API_KEYS", skill)
+        self.assertIn("optional local snapshot path", skill)
         self.assertIn(
             "python3 scripts/daily-workflow-fetch.py --output json",
             skill,
