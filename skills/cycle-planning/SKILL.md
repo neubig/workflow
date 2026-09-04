@@ -23,6 +23,20 @@ Facilitate the planning conversation. Gather evidence and make recommendations, 
 - Resolve the required product surface before evaluating a capability. Evidence from a CLI, API, SDK, mock, or different frontend does not prove that the required user experience works.
 - Keep private ticket, customer, personnel, and capacity details in authorized tools and local output.
 
+## Bundled Scripts
+
+This skill packages executable helpers in `scripts/`. Run them relative to the skill root so the skill remains portable when installed independently.
+
+- `scripts/pull_linear_planning.py` fetches incomplete issues, cycles, teams, projects, labels, assignees, hierarchy, and blocker relations from every comma-separated connection in `LINEAR_API_KEYS`. It paginates each GraphQL connection concurrently, deduplicates shared issues and cycles, and emits a local JSON snapshot. Use `--team TEAM_OR_KEY` and `--label LABEL` to narrow issue results; each option may be repeated. Credentials are read only from the environment and are never included in output.
+
+Before planning, prefer this snapshot over repeated identity and list calls:
+
+```bash
+LINEAR_API_KEYS="$LINEAR_API_KEYS" python3 scripts/pull_linear_planning.py --team "OSS Team" --label oss-release --output pretty > /tmp/linear-planning.json
+```
+
+The snapshot is private planning data. Keep it local, do not upload it, and re-fetch the relevant issue immediately before any approved mutation. If one configured connection fails, the script reports the failure and continues with successful connections; it exits nonzero when all connections fail.
+
 ## Planning Flow
 
 ### 1. Establish the Planning Frame
