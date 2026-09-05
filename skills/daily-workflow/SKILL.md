@@ -56,6 +56,7 @@ This skill packages its executable helpers in `scripts/`. Run them relative to t
 
 - `scripts/gather_github_evidence.py` pipelines the review-requested and authored-PR queues into a shared JSON or Markdown snapshot. Its default `report` profile overlaps discovery and low-cost detail reads; use `--profile full` only for remediation detail. Treat its evidence classification and remediation reasons as heuristics, follow every truncation warning with a targeted read, and keep generated reports local.
 - `scripts/daily-workflow-fetch.py` generates the action-oriented Markdown or JSON report from the shared GitHub snapshot and optional local Linear data. When `LINEAR_API_KEYS` is available, it fetches every comma-separated Linear connection and GitHub concurrently, then combines their assigned tickets. Keep its output local.
+- `scripts/check_linear_access.py` performs a minimal read-only `viewer` query for every configured Linear credential. It accepts `LINEAR_API_KEY` or comma-separated `LINEAR_API_KEYS`, reports status without exposing keys, exits nonzero if any connection fails, and supports `--json` for automation.
 - `scripts/check_ready_prs.py` checks the current user's open PRs against the readiness and live-evidence criteria used in this workflow. It requires `gh` authentication.
 
 ## Fast Report Path
