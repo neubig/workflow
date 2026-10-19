@@ -7,6 +7,14 @@ description: Human-in-the-loop daily workflow ("daily workflow", "my workflow", 
 
 Use this skill when the user asks to review or organize their daily workflow. First produce a concise report containing all immediate GitHub actions and every actionable Linear issue tied at the highest current priority. Then resolve issue and PR tracking problems. Walk through issues one by one only after that resolution phase finishes or the user explicitly requests the walkthrough.
 
+## Installed Work Queue app
+
+Use `assets/work-queue/` for the reusable Canvas app. Publish to the enabled app's actual `install_path` from the local registry, not just a source checkout. Build a structured snapshot from evidence and run `scripts/publish_work_queue.py --snapshot /absolute/private/snapshot.json --app-dir /absolute/installed/app`; this validates and updates both `src/data.json` and the embedded bundle. Verify served read-back and report visual-verification limits.
+
+Unprioritized Linear issues appear first for triage, followed by Urgent, High, Medium, and Low; within each group, earlier due dates precede undated tickets. Sort at render time so snapshots and future approved live sources behave consistently. Preserve existing filters, local storage, decisions, and pending approvals. App refresh never authorizes external mutations.
+
+Keep all generated snapshots and private runtime state local. The committed app starts with an empty generic snapshot and fails closed for live Linear access until an approved managed backend exists. Do not embed credentials or restore a browser-side secret loader. Use authorized Linear MCP reads to refresh the local snapshot in the meantime.
+
 ## Operating Rules
 
 - Resolve the current user before taking action. Use `gh api user --jq .login` for GitHub, the current-user identity from Linear, and the current Slack profile when those services are available. Ask the user when an identity cannot be resolved.
