@@ -2,6 +2,7 @@ import copy
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
+import hashlib
 import json
 import os
 import socket
@@ -257,7 +258,12 @@ class BackendTests(unittest.TestCase):
             member = archive.getmember("server.py")
             self.assertEqual(member.mode, 0o755)
             self.assertTrue(archive.extractfile(member).read().startswith(b"#!/usr/bin/env python3\n"))
-            self.assertNotIn("test_server.py", archive.getnames())
+            self.assertEqual(set(archive.getnames()), {"server.py", "extension.js", "index.html"})
+            self.assertEqual(archive.extractfile("extension.js").read(), (root.parent / "extension.js").read_bytes())
+            self.assertEqual(archive.extractfile("index.html").read(), (root.parent / "index.html").read_bytes())
+        manifest = json.loads((root.parent / "canvas-extension.json").read_text())
+        for artifact in manifest["backend"]["artifacts"].values():
+            self.assertEqual(artifact["sha256"], hashlib.sha256(first).hexdigest())
 
 
 if __name__ == "__main__":
