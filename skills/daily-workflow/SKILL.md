@@ -38,6 +38,10 @@ Before every question that asks the user to confirm, choose, merge, prioritize, 
 
 Do not make the user open a link to understand the decision. Links are supporting evidence, not a substitute for the ticket/PR title, current state, or requested action.
 
+## Reusable Work Queue app code
+
+`assets/work-queue/` contains the generic Canvas app implementation and regression tests. It contains no user data. Keep the locally installed app template and this reusable source in sync when changing app behavior. Preserve local snapshots and app identity when updating the installed app: replace only the JavaScript after its leading `const DATA = <JSON>` assignment. Never commit generated queue data, identities, credentials, or internal evidence.
+
 ## Bundled Scripts
 
 This skill packages its executable helpers in `scripts/`. Run them relative to the skill root so the skill remains portable when installed independently.
