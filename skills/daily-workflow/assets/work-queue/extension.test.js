@@ -111,15 +111,30 @@ describe('Linear approval boundary',()=>{
 describe('Linear triage ordering',()=>{
   it('puts unprioritized tickets first, then priority and earliest due date, without mutating input',()=>{
     vi.stubGlobal('fetch',vi.fn(()=>new Promise(()=>{})));
-    const row=(id,priorityNum,due)=>({id,title:id,url:'https://linear.app/example/issue/'+id,priorityNum,priority:['No priority','Urgent','High','Medium','Low'][priorityNum],due,workspace:'Example',pr:{label:'No',url:null},ci:'unknown',review:'unknown',evidence:'unknown',context:''});
-    const linear=[row('HIGH',2),row('NONE-LATE',0,'2026-10-22'),row('URGENT',1),row('NONE-UNDATED',0),row('NONE-EARLY',0,'2026-10-01'),row('LOW',4),row('MEDIUM',3)];
+    const row=(id,priorityNum,due,cycleEnd)=>({id,title:id,url:'https://linear.app/example/issue/'+id,priorityNum,priority:['No priority','Urgent','High','Medium','Low'][priorityNum],due,cycleEnd,workspace:'Example',pr:{label:'No',url:null},ci:'unknown',review:'unknown',evidence:'unknown',context:''});
+    const linear=[row('HIGH',2),row('NONE-LATE',0,'2026-10-22'),row('URGENT',1),row('NONE-UNDATED',0),row('NONE-EARLY',0,'2026-10-01'),row('LOW',4),row('MEDIUM',3),row('CYCLE-EARLIER',2,'2026-11-20','2026-11-05'),row('DUE-EARLIER',2,'2026-11-01','2026-11-10'),row('CYCLE-ONLY',2,undefined,'2026-11-15')];
     const original=[...linear];
     const {container,cleanup}=mount({linear,review:[],align:[],slack:[],actions:[]});
     const card=[...container.querySelectorAll('.card')].find(x=>x.textContent.includes('Linear priority walkthrough'));
     const ids=()=>[...card.querySelectorAll('tbody tr td:first-child a')].map(x=>x.textContent.split(' — ')[0]);
-    expect(ids()).toEqual(['NONE-EARLY','NONE-LATE','NONE-UNDATED','URGENT','HIGH','MEDIUM','LOW']);
+    expect(ids()).toEqual(['NONE-EARLY','NONE-LATE','NONE-UNDATED','URGENT','DUE-EARLIER','CYCLE-EARLIER','CYCLE-ONLY','HIGH','MEDIUM','LOW']);
     expect(linear).toEqual(original);
     const filter=container.querySelector('select[aria-label="Filter by priority"]');filter.value='No priority';filter.dispatchEvent(new Event('input'));
     expect(ids()).toEqual(['NONE-EARLY','NONE-LATE','NONE-UNDATED']);cleanup();
+  });
+});
+
+
+describe('managed Work Queue view',()=>{
+  it('mounts the approved service view instead of loading private data in Canvas',()=>{
+    const mount=vi.fn(), registerPage=vi.fn((id,fn)=>fn({container:document.createElement('div')}));
+    activate({apiVersion:'1',appBackendView:{mount},registerPage});
+    expect(mount).toHaveBeenCalledOnce();
+  });
+  it('loads only a fixed same-origin endpoint inside the service view',async()=>{
+    const {discoverLinear}=await import('./extension.js');
+    const fetcher=vi.fn(async()=>response({issues:[],sources:[]}));vi.stubGlobal('fetch',fetcher);
+    expect(await discoverLinear({workQueueBackend:true})).toEqual({rows:[],sources:[]});
+    expect(fetcher.mock.calls[0][0]).toBe('./api/linear');
   });
 });

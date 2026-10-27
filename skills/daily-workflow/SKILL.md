@@ -58,6 +58,10 @@ Before every question that asks the user to confirm, choose, merge, prioritize, 
 
 Do not make the user open a link to understand the decision. Links are supporting evidence, not a substitute for the ticket/PR title, current state, or requested action.
 
+## Reusable Work Queue app code
+
+`assets/work-queue/` contains the generic Canvas app implementation and regression tests. It contains no user data. Keep the locally installed app and this reusable source in sync when changing app behavior. Preserve private snapshots and app identity; managed-app UI updates require rebuilding its checksum-pinned artifact and approving the new revision. Never commit generated queue data, identities, credentials, or internal evidence.
+
 ## Bundled Scripts
 
 This skill packages its executable helpers in `scripts/`. Run them relative to the skill root so the skill remains portable when installed independently.
@@ -305,3 +309,14 @@ After Step 8, report every eligible PR, including unsuccessful attempts:
 ```
 
 Link each delegated conversation when one was used. Distinguish `fixed`, `still failing`, `pending`, and `blocked` rather than collapsing them into a generic completion state. Re-fetch GitHub immediately before producing this table.
+
+
+### Managed Work Queue app
+
+The reusable source is `assets/work-queue`. Run `npm test`, `npm run test:backend`, and `npm run build` there before publishing. The build packages only the generic UI and Python server into deterministic, checksum-pinned Linux archives; the host must provide Python 3.10 or later.
+
+Install the app with Canvas Apps using this repository and `skills/daily-workflow/assets/work-queue` as the repository path. The managed app needs a server with revision-bound app-secret grants and the app-backend bridge. Add `LINEAR_API_KEYS` to the server's encrypted Secrets settings, then explicitly approve that name when enabling the app. Never put its value in the manifest, snapshot, browser storage, source tree, or PR evidence. The UI fetches live Linear only inside the approved app backend; it does not receive credentials.
+
+All assigned cycles participate. Ordering is unprioritized first, then urgency, then the earlier of ticket due date and assigned cycle end date. Completed, archived, and actively blocked tickets are excluded. GitHub links, checks, and reviews are not fetched by the Linear backend and remain explicitly unverified.
+
+For this managed variant, editing the installed snapshot bundle alone does not update the immutable backend UI artifact. Rebuild/reinstall from a private local source and reapprove the changed revision if you intentionally customize snapshot sections. Never publish a personal snapshot to this public repository. Disable or uninstall stops the managed process; no app process starts on installation or ordinary mounting.

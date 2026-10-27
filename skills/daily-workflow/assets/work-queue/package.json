@@ -2,10 +2,11 @@
   "name": "daily-work-queue",
   "private": true,
   "type": "module",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "scripts": {
     "build": "node build.mjs",
-    "test": "vitest run --environment jsdom"
+    "test": "vitest run --environment jsdom",
+    "test:backend": "python3 -m unittest discover -s backend -p 'test_*.py'"
   },
   "devDependencies": {
     "vitest": "^3.0.0",
