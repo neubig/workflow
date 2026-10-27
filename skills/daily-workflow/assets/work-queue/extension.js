@@ -82,13 +82,21 @@ async function discoverReviewRequests(user, signal){
   throw new Error("GitHub pagination limit reached");
 }
 
-export async function discoverLinear(){
-  throw new Error("Linear access is disabled until an approved managed backend is configured.");
+export async function discoverLinear(host, signal){
+  if(host?.workQueueBackend!==true) throw new Error("An approved managed backend is required for Linear access.");
+  const response=await fetch("./api/linear", {signal, cache:"no-store", credentials:"same-origin"});
+  if(!response.ok) throw new Error("Linear backend refresh failed (HTTP "+response.status+").");
+  const result=await response.json();
+  if(!Array.isArray(result.issues) || !Array.isArray(result.sources)) throw new Error("Invalid Linear backend response.");
+  return {rows:result.issues, sources:result.sources};
 }
 
 export function activate(host, snapshot=DATA){
   const DATA=snapshot;
   if(host.apiVersion!=="1") throw new Error("Work Queue requires host API 1.");
+  if(host.appBackendView && host.workQueueBackend!==true){
+    return host.registerPage("work-queue", ({container}) => host.appBackendView.mount({container}));
+  }
   return host.registerPage("work-queue", ({container, path}) => {
     const style=document.createElement("style"); style.textContent=CSS; document.head.append(style);
     const root=el("section","gwq");
@@ -254,7 +262,7 @@ export function activate(host, snapshot=DATA){
       rows.forEach(x=>{
         const r=document.createElement("tr");
         const c1=document.createElement("td"); c1.append(withRecommendation(link(x.id+" — "+x.title, x.url),x.url)); const wsTag=el("div","muted",x.workspace); wsTag.style.fontSize="11px"; c1.append(wsTag);
-        const c2=document.createElement("td"); const pk=x.priority==="High"||x.priority==="Urgent"?"high":x.priority==="Medium"?"med":x.priority==="Low"?"low":"none"; c2.append(pill(x.priority+(x.due?" · "+x.due:""), pk)); if(x.due && x.due<TODAY){ const o=el("div",null,"OVERDUE"); o.style.color="var(--oh-danger,#E76A5E)"; o.style.fontSize="11px"; o.style.fontWeight="700"; c2.append(o); }
+        const c2=document.createElement("td"); const pk=x.priority==="High"||x.priority==="Urgent"?"high":x.priority==="Medium"?"med":x.priority==="Low"?"low":"none"; c2.append(pill(x.priority+(queueDate(x)!=="9999"?" · "+queueDate(x):""), pk)); if(x.cycleEnd) c2.append(el("div","sub","Cycle ends "+x.cycleEnd)); if(x.due && x.due<TODAY){ const o=el("div",null,"OVERDUE"); o.style.color="var(--oh-danger,#E76A5E)"; o.style.fontSize="11px"; o.style.fontWeight="700"; c2.append(o); }
         const c3=document.createElement("td"); c3.append(link(x.pr.label, x.pr.url));
         const c4=document.createElement("td"); c4.append(pill(x.ci, ciKind(x.ci)));
         [c1,c2,c3,c4, el("td",null,x.review), el("td",null,x.evidence), el("td",null,x.context)].forEach(c=>r.append(c)); tb.append(r);
@@ -269,7 +277,7 @@ export function activate(host, snapshot=DATA){
       linearNote.replaceChildren(el("span","spinner"),document.createTextNode("Checking approved Linear backend…"));
       linearTimer=setTimeout(()=>{if(!disposed && run===linearRun){linearRun++;linearProvenance={...linearProvenance,status:"stale"};linearNote.textContent="Linear refresh timed out — showing stale data. Retry when Linear is available.";linearRefresh.disabled=false;lcard.setAttribute("aria-busy","false");}},185000);
       try{
-        const result=await discoverLinear(host,()=>!disposed && run===linearRun);
+        const result=await discoverLinear(host,ctrl.signal);
         if(disposed || run!==linearRun)return;
         linear=result.rows;linearProvenance={status:"live",generated:new Date().toISOString(),sources:result.sources};
         const selected=wsSel.value;wsSel.replaceChildren();
@@ -284,7 +292,7 @@ export function activate(host, snapshot=DATA){
         if(disposed || run!==linearRun)return;
         linearProvenance={...linearProvenance,status:"stale"};
         linearStat.replaceChildren(stat("Linear open (stale)",linear.length));
-        linearNote.textContent="Stale Linear fallback ("+(linearProvenance.generated||"unknown date")+"). Live access disabled: the unsafe secret loader has been removed. A declared managed backend and explicit secret approval are required. No partial results substituted.";
+        linearNote.textContent="Stale Linear fallback ("+(linearProvenance.generated||"unknown date")+"). Refresh failed or the managed backend is unavailable. Enable this app with explicit secret approval on a compatible Canvas. No partial results substituted.";
       }finally{if(run===linearRun){clearTimeout(linearTimer);if(!disposed){linearRefresh.disabled=false;lcard.setAttribute("aria-busy","false");}}}
     }
     linearRefresh.addEventListener("click",loadLinear);loadLinear();
@@ -293,7 +301,7 @@ export function activate(host, snapshot=DATA){
       ["Item","Needed"],
       actions.map(a=>[link(a.item.label, a.item.url), a.needed])));
 
-    root.append(el("p","sub","Review requests load directly from GitHub on page open and Refresh reviews — no agent run needed. Public repositories only; private review requests need an authenticated server-side GitHub connection. Live Linear loading is disabled pending managed-backend setup and explicit secret approval. Other sections use the daily-workflow snapshot. Never commit private queue data to a public repository."));
+    root.append(el("p","sub","Review requests load directly from GitHub on page open and Refresh reviews — no agent run needed. Public repositories only; private review requests need an authenticated server-side GitHub connection. Live Linear loads only inside the approved managed backend. Other sections use the daily-workflow snapshot. Never commit private queue data to a public repository."));
     container.append(root);
     return () => { disposed=true; linearRun++;clearTimeout(linearTimer); clearTimeout(reviewTimer); if(ctrl) try{ctrl.abort();}catch(e){} root.remove(); style.remove(); };
   });

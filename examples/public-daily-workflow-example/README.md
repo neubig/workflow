@@ -6,12 +6,18 @@ shows five human-in-the-loop stages: privacy inspection, intake approval, a
 redirect of the agent's initial priority recommendation, bounded-action
 approval, and evidence rejection/recovery.
 
-The committed replay is safe to publish as a **fixture-backed development
-demo**. It must not be described as a recording of real Slack content. The exact
-remaining blocker for a real-Slack recording is an OpenHands message/thread
-with documented public-disclosure approval; see [Privacy audit](PRIVACY-AUDIT.md).
+The committed replay code and fixture are safe to publish as a **fixture-backed
+development demo**. They must not be described as a recording of real Slack
+content. The exact remaining blocker for a real-Slack recording is an OpenHands
+message/thread with documented public-disclosure approval; see
+[Privacy audit](PRIVACY-AUDIT.md).
 
-![Animated terminal replay](../../.pr/public-daily-workflow-example/live-demo.svg)
+[![Animated terminal replay](https://raw.githubusercontent.com/neubig/workflow/4c8bf65a2b1c77fc5c0313990849fa1d982dddf9/.pr/public-daily-workflow-example/live-demo.svg)](https://github.com/neubig/workflow/blob/4c8bf65a2b1c77fc5c0313990849fa1d982dddf9/.pr/public-daily-workflow-example/live-demo.svg)
+
+The animation above is the commit-pinned, reviewed live replay from
+[PR #12](https://github.com/neubig/workflow/pull/12). It is retained as
+historical PR evidence; disposable `.pr/` artifacts are intentionally not part
+of `main`.
 
 ## Data boundary
 
@@ -81,11 +87,15 @@ Refresh the text transcript, asciinema cast, animated SVG, and checksums with:
 
 The generated artifacts are genuine executions of `demo.py` through its live
 GitHub-verification path. `--answers` echoes previously chosen human decisions
-so the recording is reproducible; omit it for a fresh human session. See
-[the PR-only evidence index](../../.pr/public-daily-workflow-example/README.md)
-for what each artifact proves. The `.pr/` directory is temporary reviewer
-context and is removed after approval; the source map, privacy audit, replay
-code, and reproduction instructions remain with the example.
+so the recording is reproducible; omit it for a fresh human session. The
+reviewed PR #12 artifacts are available as a commit-pinned
+[evidence index](https://github.com/neubig/workflow/blob/4c8bf65a2b1c77fc5c0313990849fa1d982dddf9/.pr/public-daily-workflow-example/README.md),
+[cast](https://github.com/neubig/workflow/blob/4c8bf65a2b1c77fc5c0313990849fa1d982dddf9/.pr/public-daily-workflow-example/live-demo.cast),
+[SVG](https://github.com/neubig/workflow/blob/4c8bf65a2b1c77fc5c0313990849fa1d982dddf9/.pr/public-daily-workflow-example/live-demo.svg),
+and [transcript](https://github.com/neubig/workflow/blob/4c8bf65a2b1c77fc5c0313990849fa1d982dddf9/.pr/public-daily-workflow-example/live-demo.txt).
+The `.pr/` directory is temporary reviewer context and is removed after
+approval; run `record-demo.sh` to regenerate it. The source map, privacy audit,
+replay code, and reproduction instructions remain with the example.
 
 For a final real-Slack video, first replace the fixture only after obtaining the
 approval fields enforced by `demo.py`, update the source map, repeat the privacy
@@ -101,5 +111,6 @@ python3 -m unittest discover -s ../../tests -p 'test_*.py'
 ```
 
 The unit tests validate the policy gates; they are not live evidence. The
-committed cast/SVG/transcript, produced with `--verify-live`, are the live-path
-evidence.
+commit-pinned PR #12 cast, SVG, and transcript were produced with
+`--verify-live` and are the reviewed live-path evidence. Newly generated
+recordings remain under `.pr/` for review and do not land on `main`.

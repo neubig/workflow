@@ -123,3 +123,18 @@ describe('Linear triage ordering',()=>{
     expect(ids()).toEqual(['NONE-EARLY','NONE-LATE','NONE-UNDATED']);cleanup();
   });
 });
+
+
+describe('managed Work Queue view',()=>{
+  it('mounts the approved service view instead of loading private data in Canvas',()=>{
+    const mount=vi.fn(), registerPage=vi.fn((id,fn)=>fn({container:document.createElement('div')}));
+    activate({apiVersion:'1',appBackendView:{mount},registerPage});
+    expect(mount).toHaveBeenCalledOnce();
+  });
+  it('loads only a fixed same-origin endpoint inside the service view',async()=>{
+    const {discoverLinear}=await import('./extension.js');
+    const fetcher=vi.fn(async()=>response({issues:[],sources:[]}));vi.stubGlobal('fetch',fetcher);
+    expect(await discoverLinear({workQueueBackend:true})).toEqual({rows:[],sources:[]});
+    expect(fetcher.mock.calls[0][0]).toBe('./api/linear');
+  });
+});

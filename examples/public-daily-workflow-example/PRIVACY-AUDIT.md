@@ -26,6 +26,7 @@ From the repository root:
 ```bash
 python3 examples/public-daily-workflow-example/demo.py --validate-only --verify-live
 python3 -m unittest discover -s tests -p 'test_*.py'
+./examples/public-daily-workflow-example/record-demo.sh
 rg -n \
   '(github_pat_|gh[opsu]_|xox[baprs]-|https://[^ ]*slack\.com/archives/|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})' \
   examples/public-daily-workflow-example/data/intake.json \
@@ -40,7 +41,10 @@ setup documentation is not a credential value and is safe to publish.
 
 ## Pre-publication frame audit
 
-The committed SVG and cast were inspected against this checklist:
+The commit-pinned SVG and cast from
+[PR #12](https://github.com/neubig/workflow/pull/12) were inspected against this
+checklist. Disposable `.pr/` artifacts are intentionally absent from `main` and
+can be regenerated with `record-demo.sh`:
 
 - only the three source-map records appear;
 - the Slack sentence is visibly prefixed `[SYNTHETIC FIXTURE]`;
@@ -48,7 +52,8 @@ The committed SVG and cast were inspected against this checklist:
   unrelated tabs are captured;
 - the human redirect and evidence rejection/recovery are visible;
 - the final frame says both `fixture-backed` and the real-Slack blocker; and
-- the checksums match `.pr/public-daily-workflow-example/SHA256SUMS`.
+- the checksums match the commit-pinned
+  [`SHA256SUMS`](https://github.com/neubig/workflow/blob/4c8bf65a2b1c77fc5c0313990849fa1d982dddf9/.pr/public-daily-workflow-example/SHA256SUMS).
 
 ## Exact remaining blocker
 
