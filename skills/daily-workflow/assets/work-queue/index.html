@@ -1,0 +1,6 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Work Queue</title></head>
+<body><main id="queue"></main><script type="module">
+import {activate} from './extension.js';
+activate({apiVersion:'1',workQueueBackend:true,registerPage(id,mount){return mount({container:document.getElementById('queue'),path:''});}});
+</script></body></html>

@@ -1,7 +1,10 @@
-import { readFileSync, writeFileSync } from "node:fs";
-// extension.js is checked in and self-contained; this script verifies it parses as ESM with no bare imports.
-const src = readFileSync(new URL("./extension.js", import.meta.url), "utf8");
-if (!/export\s+function\s+activate/.test(src)) throw new Error("activate export missing");
-if (/^\s*import\s+[^"']*["'][^./]/m.test(src)) throw new Error("bare import found");
-if (/import\s*\(/.test(src)) throw new Error("dynamic import found");
-console.log(`extension.js OK (${src.length} bytes)`);
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+const source = readFileSync(new URL("./extension.js", import.meta.url), "utf8");
+if (!/export\s+function\s+activate/.test(source)) throw new Error("activate export missing");
+if (/^\s*import\s+[^"']*["'][^./]/m.test(source)) throw new Error("bare import found");
+if (/import\s*\(/.test(source)) throw new Error("dynamic import found");
+const syntax = spawnSync(process.execPath, ["--input-type=module", "--check"], {input: source, encoding: "utf8"});
+if (syntax.status !== 0) throw new Error(syntax.stderr);
+const backend = spawnSync("python3", [new URL("./backend/build-backend.py", import.meta.url).pathname], {stdio: "inherit"});
+if (backend.status !== 0) throw new Error("Backend packaging failed");

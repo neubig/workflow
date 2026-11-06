@@ -2,8 +2,8 @@
   "schema_version": 1,
   "name": "daily-work-queue",
   "display_name": "Work Queue",
-  "version": "0.4.0",
-  "description": "Work Queue: independent public GitHub review discovery with loading and refresh, plus workflow snapshot alignment and Linear priorities.",
+  "version": "0.5.0",
+  "description": "Read-only Work Queue with consented server-side Linear access and cycle-aware triage ordering.",
   "entrypoint": "extension.js",
   "contributes": {
     "pages": [
@@ -13,6 +13,38 @@
         "path": "/work-queue",
         "nav_label": "Work Queue"
       }
+    ]
+  },
+  "backend": {
+    "schema_version": 1,
+    "artifacts": {
+      "linux-amd64": {
+        "path": "backend/linux-amd64.tar.gz",
+        "sha256": "dbbb23e1cb7645171763814572194cc2fafa920e48d6774d15009e60c96eaf35"
+      },
+      "linux-arm64": {
+        "path": "backend/linux-arm64.tar.gz",
+        "sha256": "dbbb23e1cb7645171763814572194cc2fafa920e48d6774d15009e60c96eaf35"
+      }
+    },
+    "argv": [
+      "{artifact_dir}/server.py",
+      "--host=127.0.0.1",
+      "--port={port}",
+      "--data-dir={data_dir}"
+    ],
+    "health": {
+      "path": "/health",
+      "timeout_seconds": 30,
+      "interval_seconds": 0.1
+    },
+    "inherit_environment": [
+      "PATH",
+      "LANG",
+      "TZ"
+    ],
+    "secret_refs": [
+      "LINEAR_API_KEYS"
     ]
   }
 }
