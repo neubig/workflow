@@ -38,6 +38,19 @@
       ]
     },
     {
+      "name": "security-advisory",
+      "source": "./security-advisory",
+      "description": "Coordinate vulnerability reports, verify released fixes and downstream adoption, and prepare approved CVE requests and advisory publication",
+      "category": "security",
+      "keywords": [
+        "security",
+        "advisory",
+        "cve",
+        "disclosure",
+        "release"
+      ]
+    },
+    {
       "name": "eval-with-ci",
       "source": "./eval-with-ci",
       "description": "Run evaluations through the OpenHands/software-agent-sdk GitHub Actions CI workflow",
