@@ -8,6 +8,7 @@ Reusable OpenHands skills for daily development workflows and related integratio
 |-------|-------------|----------|
 | [daily-workflow](./skills/daily-workflow/SKILL.md) | Human-in-the-loop alignment of review requests, GitHub work, Linear tickets, and Slack-derived work for the current user | `daily workflow`, `my workflow`, `work queue` |
 | [cycle-planning](./skills/cycle-planning/SKILL.md) | Facilitate collaborative, human-in-the-loop Linear cycle and sprint planning | `cycle planning`, `sprint planning`, `plan the cycle` |
+| [security-advisory](./skills/security-advisory/SKILL.md) | Coordinate vulnerability disclosure, verify shipped fixes and downstream adoption, and publish approved advisories | `prepare a security advisory`, `request a CVE`, `publish an advisory` |
 | [eval-with-ci](./skills/eval-with-ci/SKILL.md) | Run SDK evaluations through a GitHub Actions CI workflow | `run eval`, `evaluation`, `benchmark`, `swebench` |
 | [giant-eagle](./skills/giant-eagle/SKILL.md) | Find grocery products and recipe ingredient substitutions | `giant eagle`, `grocery ingredients`, `buy ingredients`, `recipe shopping` |
 | [sub-agent-delegation](./skills/sub-agent-delegation/SKILL.md) | Delegate substantial, self-contained tasks to sub-agents | `delegate task`, `sub-agent`, `spawn agent`, `parallel task` |
